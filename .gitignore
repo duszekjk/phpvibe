@@ -1,0 +1,9 @@
+.env
+.venv/
+__pycache__/
+*.py[cod]
+db.sqlite3
+staticfiles/
+var/
+site_configs/*.toml
+!site_configs/*.example

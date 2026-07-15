@@ -1,0 +1,17 @@
+{% extends "base.html" %}
+{% block title %}Nowa rozmowa · PHP Vibe{% endblock %}
+{% block content %}
+<a class="back" href="{% url 'dashboard' %}">← Wszystkie rozmowy</a>
+<section class="form-card card">
+  <p class="eyebrow">Nowa kopia robocza</p>
+  <h1>Co dziś zmieniamy?</h1>
+  <p class="muted">Po utworzeniu rozmowy strona zostanie skopiowana. Żadna wiadomość nie zmieni strony publicznej bez osobnego zatwierdzenia.</p>
+  <form method="post" class="stack">{% csrf_token %}
+    {{ form.non_field_errors }}
+    <label>Strona {{ form.site }}{{ form.site.errors }}</label>
+    <label>Temat rozmowy {{ form.title }}{{ form.title.errors }}</label>
+    <label>Dokładny adres URL {{ form.target_url }}{{ form.target_url.errors }}<small>Adres pomaga znaleźć właściwe pliki, ale nie ogranicza dalszej rozmowy.</small></label>
+    <button class="button primary" type="submit">Utwórz bezpieczną kopię</button>
+  </form>
+</section>
+{% endblock %}

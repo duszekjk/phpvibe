@@ -1,0 +1,40 @@
+name = "Wspólnota Jerozolima"
+slug = "jerozolima"
+is_active = true
+
+# W środowisku produkcyjnym ustaw rzeczywistą ścieżkę. Ta ścieżka wskazuje tylko kopię testową.
+root_path = "/Volumes/FPEX/jerozolima/strona/jerozolima"
+allowed_hosts = ["jerozolima.org", "www.jerozolima.org"]
+
+# Reverse proxy powinien mapować ten URL na VIBE_WORKSPACE_ROOT/{session_id}/site,
+# chronić go podpisanym __vibe_token i wstrzykiwać static/editor/preview-bridge.js.
+preview_url_template = "https://tmp.jerozolima.org/vibe/{session_id}/"
+
+allowed_extensions = [".php", ".css", ".js", ".html", ".txt", ".md", ".ics"]
+ignored_names = [".git", ".DS_Store", "vendor", "node_modules"]
+protected_paths = [".env", ".env.*", "*secret*", "*credentials*", "config/private.php"]
+
+# Publikację włącz dopiero po ustawieniu prawdziwego backup_path i przetestowaniu podglądu.
+publish_enabled = false
+backup_path = "/var/backups/phpvibe"
+
+description = """
+Klasyczna strona PHP bez frameworka. index.php odczytuje parametry strona i podstrona,
+a następnie dołącza główny plik <strona><podstrona>.php. Menu znajduje się w
+pliki/opisy/menu.php. Wiele treści redakcyjnych jest w pliki/opisy/*.php,
+logika pomocnicza w pliki/php/*.php, style w pliki/css/*.css, a wydarzenia w kalendarz/*.ics.
+Najpierw analizuj parametry URL i include w głównym pliku, potem szukaj tekstu.
+"""
+
+# Testowa kopia przekierowuje obecnie index.php na stronę publiczną. W podglądzie
+# wyłączamy tylko ten fragment. Aplikacja odtworzy go przed publikacją pliku.
+[[preview_replacements]]
+path = "index.php"
+required = true
+production_text = """<?php
+header('Location: https://jerozolima.org/');
+    die();
+"""
+preview_text = """<?php
+// __PHPVIBE_PREVIEW_REDIRECT_DISABLED__: wyłączone wyłącznie w kopii roboczej.
+"""

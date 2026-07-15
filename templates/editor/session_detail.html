@@ -1,0 +1,135 @@
+{% extends "base.html" %}
+{% load static %}
+{% block title %}{{ edit_session.title }} · PHP Vibe{% endblock %}
+{% block body_class %}editor-mode{% endblock %}
+{% block extra_head %}<link rel="stylesheet" href="{% static 'editor/workbench.css' %}">{% endblock %}
+{% block content %}
+<div class="workbench-heading">
+  <a class="workbench-back" href="{% url 'dashboard' %}" aria-label="Wróć do rozmów">←</a>
+  <div>
+    <p class="eyebrow">{{ edit_session.site.name }}</p>
+    <h1>{{ edit_session.title }}</h1>
+  </div>
+  <span class="status {{ edit_session.status }}">{{ edit_session.get_status_display }}</span>
+</div>
+
+{% if edit_session.status == "failed" %}<div class="flash error">{{ edit_session.error_message }}</div>{% endif %}
+
+<div
+  class="editor-workbench"
+  id="editor-workbench"
+  data-preview-base="{{ preview_base_url }}"
+  data-target-url="{{ conversation.target_url }}"
+  data-navigate-url="{% url 'navigate_page' edit_session.pk %}"
+  data-inline-edit-url="{% url 'inline_edit' edit_session.pk conversation.pk %}"
+  data-allowed-hosts="{{ allowed_hosts }}"
+>
+  <section class="preview-stage card">
+    <div class="browser-toolbar">
+      <div class="browser-nav">
+        <button type="button" class="icon-button" id="preview-back" title="Wstecz" aria-label="Wstecz">‹</button>
+        <button type="button" class="icon-button" id="preview-forward" title="Dalej" aria-label="Dalej">›</button>
+      </div>
+      <form method="post" action="{% url 'navigate_page' edit_session.pk %}" class="address-form" id="address-form">
+        {% csrf_token %}
+        <span class="address-lock" aria-hidden="true">⌁</span>
+        {{ address_form.url }}
+        <button type="submit" class="address-go" aria-label="Otwórz adres">→</button>
+      </form>
+      <button type="button" class="toolbar-button edit-toggle" id="edit-mode-toggle" aria-pressed="false">
+        <span class="edit-dot"></span><span>Edytuj tekst</span>
+      </button>
+      <button type="button" class="icon-button" id="preview-refresh" title="Odśwież podgląd" aria-label="Odśwież podgląd">↻</button>
+      {% if preview_url %}<a class="icon-button" href="{{ preview_url }}" target="_blank" rel="noopener" title="Otwórz w nowej karcie" aria-label="Otwórz w nowej karcie">↗</a>{% endif %}
+    </div>
+
+    <div class="preview-viewport">
+      {% if preview_url %}
+        <iframe id="site-preview" src="{{ preview_url }}" title="Podgląd edytowanej strony" referrerpolicy="no-referrer"></iframe>
+        <div class="preview-loading" id="preview-loading"><span></span>Ładowanie podglądu…</div>
+      {% else %}
+        <div class="preview-unavailable"><strong>Podgląd nie jest skonfigurowany</strong><p>Ustaw `preview_url_template` dla tej strony.</p></div>
+      {% endif %}
+    </div>
+
+    <div class="preview-actions">
+      <div class="edit-hint" id="edit-hint"><span>⇧</span> Przytrzymaj Shift i kliknij tekst albo włącz tryb edycji.</div>
+      <div class="preview-action-buttons">
+        <details class="workbench-details">
+          <summary>Zmiany <b>{{ edit_session.revisions.count }}</b></summary>
+          <div class="details-popover history-popover">
+            <h3>Historia wspólnej kopii</h3>
+            {% for revision in edit_session.revisions.all|slice:":10" %}
+              <div class="revision"><strong>{{ revision.summary }}</strong><span>{{ revision.changed_files|join:", "|default:"Stan początkowy" }}</span><time>{{ revision.created_at|date:"d.m H:i" }}</time></div>
+            {% empty %}<p class="muted">Nie zmieniono jeszcze żadnego pliku.</p>{% endfor %}
+          </div>
+        </details>
+        {% if diff %}
+          <details class="workbench-details">
+            <summary>Diff</summary>
+            <div class="details-popover diff-popover"><pre>{{ diff }}</pre></div>
+          </details>
+        {% endif %}
+        <form method="post" action="{% url 'reset_session' edit_session.pk %}" onsubmit="return confirm('Przywrócić całą kopię roboczą do stanu z początku?');">
+          {% csrf_token %}<input type="hidden" name="confirmation" value="RESET"><input type="hidden" name="return_conversation" value="{{ conversation.pk }}">
+          <button class="toolbar-button subtle-danger" type="submit">Przywróć początek</button>
+        </form>
+        {% if can_publish and publish_configured and edit_session.status == "active" %}
+          <form method="post" action="{% url 'publish_session' edit_session.pk %}" onsubmit="return confirm('Opublikować zmiany na stronie?');">
+            {% csrf_token %}<input type="hidden" name="confirmation" value="PUBLISH"><input type="hidden" name="return_conversation" value="{{ conversation.pk }}">
+            <button class="button success" type="submit">Opublikuj</button>
+          </form>
+        {% endif %}
+      </div>
+    </div>
+  </section>
+
+  <aside class="chat-dock card">
+    <div class="chat-dock-head">
+      <div><span>Czat podstrony</span><strong>{{ conversation.label }}</strong></div>
+      <label class="page-chat-select">
+        <span class="sr-only">Przełącz czat podstrony</span>
+        <select id="page-chat-select">
+          {% for page in page_conversations %}<option value="{{ page.get_absolute_url }}" {% if page.pk == conversation.pk %}selected{% endif %}>{{ page.label }}</option>{% endfor %}
+        </select>
+      </label>
+    </div>
+    <div class="chat-url" title="{{ conversation.target_url }}">{{ conversation.target_url }}</div>
+
+    <div class="messages chat-scroll" id="chat-messages">
+      {% for item in conversation.messages.all %}
+        <article class="message {{ item.role }}">
+          <div class="avatar">{% if item.role == "user" %}Ty{% elif item.role == "system" %}✓{% else %}AI{% endif %}</div>
+          <div><p>{{ item.content|linebreaksbr }}</p><time>{{ item.created_at|date:"H:i" }}</time></div>
+        </article>
+      {% empty %}
+        <div class="welcome compact-welcome">
+          <div class="spark">✦</div><h2>Nowy czat tej podstrony</h2>
+          <p>Napisz, co zmienić, albo kliknij tekst w podglądzie z wciśniętym Shift.</p>
+        </div>
+      {% endfor %}
+    </div>
+
+    {% if edit_session.status == "active" %}
+      <form method="post" action="{% url 'send_message' edit_session.pk conversation.pk %}" class="composer chat-composer">
+        {% csrf_token %}{{ chat_form.message }}
+        <button class="send-button" type="submit" aria-label="Wyślij wiadomość">↑</button>
+      </form>
+    {% endif %}
+  </aside>
+</div>
+
+<dialog class="inline-editor" id="inline-editor">
+  <form method="dialog" class="inline-editor-card" id="inline-editor-form">
+    <div class="inline-editor-head"><div><span>Bezpośrednia edycja</span><strong id="selected-element-label">Wybrany tekst</strong></div><button value="cancel" class="modal-close" aria-label="Zamknij">×</button></div>
+    <label>Obecny tekst<textarea id="inline-old-text" name="old_text" rows="4" readonly></textarea></label>
+    <label>Nowy tekst<textarea id="inline-new-text" name="new_text" rows="5" required></textarea></label>
+    <input type="hidden" name="selector" id="inline-selector"><input type="hidden" name="tag_name" id="inline-tag"><input type="hidden" name="outer_html" id="inline-html">
+    <div class="inline-error" id="inline-error" role="alert"></div>
+    <div class="inline-editor-actions"><button value="cancel" class="button secondary">Anuluj</button><button type="submit" value="default" class="button primary" id="inline-save">Zmień przez AI</button></div>
+  </form>
+</dialog>
+
+<div class="workbench-toast" id="workbench-toast" role="status"></div>
+<script src="{% static 'editor/workbench.js' %}"></script>
+{% endblock %}

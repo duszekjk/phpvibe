@@ -1,0 +1,21 @@
+{% extends "base.html" %}
+{% block content %}
+<div class="title-row">
+  <div><p class="eyebrow">Twoje strony</p><h1>Rozmowy edycyjne</h1></div>
+  <a class="button primary" href="{% url 'start_session' %}">+ Nowa rozmowa</a>
+</div>
+<section class="card">
+  {% if sessions %}
+    <div class="session-list">
+      {% for item in sessions %}
+        <a href="{{ item.get_absolute_url }}" class="session-item">
+          <div><strong>{{ item.title }}</strong><span>{{ item.site.name }} · {{ item.target_url|truncatechars:75 }}</span></div>
+          <div class="session-meta"><span class="status {{ item.status }}">{{ item.get_status_display }}</span><time>{{ item.updated_at|date:"d.m.Y H:i" }}</time></div>
+        </a>
+      {% endfor %}
+    </div>
+  {% else %}
+    <div class="empty"><h2>Nie ma jeszcze rozmów</h2><p>Zacznij od wskazania strony i adresu, który chcesz zmienić.</p></div>
+  {% endif %}
+</section>
+{% endblock %}

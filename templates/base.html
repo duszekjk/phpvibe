@@ -1,0 +1,27 @@
+{% load static %}
+<!doctype html>
+<html lang="pl">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>{% block title %}PHP Vibe{% endblock %}</title>
+  <link rel="stylesheet" href="{% static 'editor/app.css' %}">
+  {% block extra_head %}{% endblock %}
+</head>
+<body class="{% block body_class %}{% endblock %}">
+  <header class="topbar">
+    <a class="brand" href="{% url 'dashboard' %}"><span>PHP</span> Vibe</a>
+    {% if user.is_authenticated %}
+      <nav>
+        <span class="muted">{{ user.get_full_name|default:user.username }}</span>
+        {% if user.is_staff %}<a href="{% url 'admin:index' %}">Administracja</a>{% endif %}
+        <form method="post" action="{% url 'logout' %}">{% csrf_token %}<button class="link-button">Wyloguj</button></form>
+      </nav>
+    {% endif %}
+  </header>
+  <main class="page">
+    {% for message in messages %}<div class="flash {{ message.tags }}">{{ message }}</div>{% endfor %}
+    {% block content %}{% endblock %}
+  </main>
+</body>
+</html>

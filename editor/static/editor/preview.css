@@ -1,0 +1,3 @@
+html.phpvibe-edit-mode,html.phpvibe-edit-mode *{cursor:crosshair!important}
+.__phpvibe_selected{outline:3px solid #6c4cff!important;outline-offset:3px!important;box-shadow:0 0 0 6px rgba(108,76,255,.16)!important}
+.__phpvibe_selected::selection{background:#6c4cff;color:#fff}

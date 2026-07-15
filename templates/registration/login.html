@@ -1,0 +1,15 @@
+{% extends "base.html" %}
+{% block title %}Logowanie · PHP Vibe{% endblock %}
+{% block content %}
+<section class="auth-card card">
+  <p class="eyebrow">Bezpieczna edycja strony</p>
+  <h1>Zaloguj się</h1>
+  <p class="muted">Użyj konta przydzielonego przez administratora.</p>
+  {% if form.errors %}<div class="flash error">Nieprawidłowa nazwa użytkownika lub hasło.</div>{% endif %}
+  <form method="post" class="stack">{% csrf_token %}
+    <label>Nazwa użytkownika {{ form.username }}</label>
+    <label>Hasło {{ form.password }}</label>
+    <button class="button primary" type="submit">Zaloguj</button>
+  </form>
+</section>
+{% endblock %}
