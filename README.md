@@ -65,7 +65,7 @@ python manage.py sync_site_configs
 
 ## Podgląd PHP — wymagany model bezpieczeństwa
 
-Nie należy uruchamiać kodu PHP zmienianego przez model w głównym poolu PHP-FPM. Podgląd musi działać w osobnym kontenerze albo przynajmniej w osobnym poolu pod nieuprzywilejowanym użytkownikiem, z:
+Docelowo kod PHP zmieniany przez model powinien działać w osobnym kontenerze albo przynajmniej w osobnym poolu PHP-FPM pod nieuprzywilejowanym użytkownikiem, z:
 
 - katalogiem roboczym konkretnego projektu edycyjnego jako jedynym katalogiem strony;
 - prawami systemowymi tylko do odczytu dla użytkownika procesu PHP (pliki zmienia wyłącznie proces Django);
@@ -101,14 +101,12 @@ Bridge przechwytuje wybór tekstu i wewnętrzną nawigację, a następnie komuni
 
 Konfiguracja vhostów panelu i podglądu dla portów `80`, `8080` i `443` jest zależna od konkretnego serwera i celowo nie jest przechowywana w tym repozytorium. To samo dotyczy pliku LaunchAgent `plist`. Pliki te należy utrzymywać poza katalogiem projektu. Ścieżki `/.well-known/acme-challenge/` i `/static/` muszą być obsługiwane przed proxy.
 
-Główna konfiguracja Apache musi już zawierać `Listen 8080` oraz `Listen 443` i mieć załadowane moduły `rewrite`, `proxy`, `proxy_http`, `headers`, `ssl`, `alias`, `dir`, `actions` oraz odpowiednio `cgi` (MPM prefork) albo `cgid` (MPM event/worker). Podgląd nie dziedziczy nieznanego handlera PHP z innego vhosta. Dedykowany launcher `php_preview_cgi.py` uruchamia `php-cgi`, sprawdza zgodność URL-u ze ścieżką kopii i ustawia osobny `open_basedir` dla UUID. Brak `php-cgi` kończy się odpowiedzią `503`, nigdy wysłaniem źródła PHP.
+Główna konfiguracja Apache musi już zawierać `Listen 8080` oraz `Listen 443` i mieć załadowane moduły `rewrite`, `proxy`, `proxy_http`, `proxy_fcgi`, `headers`, `ssl`, `alias` i `dir`. Na aktualnym serwerze pliki PHP są przekazywane przez istniejący handler `SetHandler "proxy:fcgi://127.0.0.1:9000"`, taki sam jak w vhoście `jerozolima.org`. Konfiguracja podglądu nie używa `mod_actions` ani launchera CGI.
 
 Po sklonowaniu repozytorium do `/private/var/www/phpvibe`:
 
 ```bash
-chmod 755 /private/var/www/phpvibe/deploy/preview_auth_map.py \
-  /private/var/www/phpvibe/deploy/php_preview_cgi.py
-command -v php-cgi
+chmod 755 /private/var/www/phpvibe/deploy/preview_auth_map.py
 sudo mkdir -p /private/var/www/certbot/.well-known/acme-challenge
 sudo chown -R _www:_www /private/var/www/certbot
 sudo apachectl -t

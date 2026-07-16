@@ -61,9 +61,9 @@ class RepositoryPolicyTests(unittest.TestCase):
             "Pliki uruchomieniowe lub prywatne nie mogą być śledzone: " + ", ".join(forbidden),
         )
 
-    def test_deployment_helpers_keep_executable_git_mode(self):
+    def test_deployment_helper_keeps_executable_git_mode(self):
         result = subprocess.run(
-            ["git", "ls-files", "--stage", "deploy/preview_auth_map.py", "deploy/php_preview_cgi.py"],
+            ["git", "ls-files", "--stage", "deploy/preview_auth_map.py"],
             cwd=REPOSITORY_ROOT,
             check=True,
             capture_output=True,
@@ -71,7 +71,6 @@ class RepositoryPolicyTests(unittest.TestCase):
         )
         modes = {line.split(maxsplit=3)[3]: line.split(maxsplit=1)[0] for line in result.stdout.splitlines()}
         self.assertEqual(modes.get("deploy/preview_auth_map.py"), "100755")
-        self.assertEqual(modes.get("deploy/php_preview_cgi.py"), "100755")
 
     def test_example_site_configuration_has_safe_defaults(self):
         example = REPOSITORY_ROOT / "site_configs" / "jerozolima.toml.example"
