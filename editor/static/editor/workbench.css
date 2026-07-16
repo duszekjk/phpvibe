@@ -10,3 +10,293 @@
 @media(max-width:1050px){.editor-workbench{grid-template-columns:minmax(0,1fr) 330px}.edit-toggle span:last-child{display:none}.edit-toggle{padding:0 13px}.edit-hint{max-width:310px}}
 @media(max-width:760px){.editor-mode{overflow:auto}.editor-mode .page{width:calc(100% - 14px)}.editor-workbench{height:auto;min-height:0;grid-template-columns:1fr}.preview-stage{height:68vh;min-height:520px}.chat-dock{height:70vh;min-height:500px}.edit-hint{display:none}.browser-nav{display:none}.preview-actions{justify-content:flex-end}.workbench-heading .status{display:none}}
 @media(max-width:520px){.browser-toolbar{gap:4px;padding:7px}.browser-toolbar>.icon-button:last-child{display:none}.address-form input{font-size:11px}.preview-action-buttons .subtle-danger{display:none}.editor-mode .composer{flex-direction:row}.details-popover{position:fixed;left:8px;right:8px;bottom:64px;width:auto}.workbench-heading h1{font-size:17px}}
+
+/* Ciepła warstwa aplikacji: Radix Sand dla powierzchni, Orange dla interakcji. */
+.editor-mode {
+  background:
+    radial-gradient(circle at 18% -10%, var(--orange-3) 0, transparent 34rem),
+    var(--sand-2);
+}
+
+.workbench-back {
+  background: var(--sand-1);
+  border-color: var(--sand-6);
+  color: var(--sand-12);
+  box-shadow: 0 2px 7px rgba(88, 45, 29, .06);
+  transition: background .15s ease, border-color .15s ease, color .15s ease;
+}
+
+.workbench-back:hover {
+  background: var(--orange-3);
+  border-color: var(--orange-6);
+  color: var(--orange-12);
+}
+
+.preview-stage,
+.chat-dock {
+  border-color: var(--sand-6);
+  box-shadow: 0 1px 2px rgba(88, 45, 29, .05), 0 12px 32px rgba(88, 45, 29, .09);
+}
+
+.browser-toolbar {
+  background: var(--sand-2);
+  border-color: var(--sand-6);
+}
+
+.icon-button,
+.toolbar-button,
+.address-go {
+  color: var(--sand-11);
+}
+
+.icon-button:hover,
+.address-go:hover {
+  background: var(--orange-3);
+  color: var(--orange-12);
+}
+
+.toolbar-button {
+  background: var(--sand-4);
+  border: 1px solid var(--sand-6);
+}
+
+.toolbar-button:hover {
+  background: var(--sand-5);
+  border-color: var(--sand-7);
+}
+
+.edit-dot {
+  background: var(--sand-9);
+}
+
+.edit-toggle.active {
+  background: var(--orange-3);
+  border-color: var(--orange-6);
+  color: var(--orange-12);
+}
+
+.edit-toggle.active .edit-dot {
+  background: var(--orange-9);
+  box-shadow: 0 0 0 4px rgba(247, 107, 21, .17);
+}
+
+.address-form {
+  background: var(--sand-1);
+  border-color: var(--sand-7);
+  box-shadow: inset 0 1px 2px rgba(88, 45, 29, .04);
+}
+
+.address-form:focus-within {
+  border-color: var(--orange-8);
+  box-shadow: 0 0 0 3px var(--orange-4);
+}
+
+.address-form input {
+  color: var(--sand-12);
+}
+
+.address-lock {
+  color: var(--orange-10);
+}
+
+.preview-viewport {
+  background: var(--sand-5);
+}
+
+.preview-loading {
+  background: rgba(253, 253, 252, .91);
+  color: var(--sand-11);
+}
+
+.preview-loading span {
+  border-color: var(--orange-4);
+  border-top-color: var(--orange-10);
+}
+
+.preview-actions {
+  background: var(--sand-1);
+  border-color: var(--sand-6);
+}
+
+.edit-hint {
+  color: var(--sand-11);
+}
+
+.edit-hint span {
+  background: var(--orange-2);
+  border-color: var(--orange-6);
+  color: var(--orange-12);
+  box-shadow: 0 1px 2px rgba(88, 45, 29, .08);
+}
+
+.subtle-danger {
+  background: var(--tomato-3);
+  border-color: var(--tomato-6);
+  color: var(--tomato-12);
+}
+
+.subtle-danger:hover {
+  background: var(--tomato-6);
+  border-color: var(--tomato-9);
+}
+
+.workbench-details summary {
+  background: var(--sand-3);
+  border: 1px solid var(--sand-6);
+  color: var(--sand-12);
+}
+
+.workbench-details summary:hover {
+  background: var(--orange-2);
+  border-color: var(--orange-6);
+}
+
+.workbench-details summary b {
+  background: var(--orange-3);
+  color: var(--orange-12);
+}
+
+.details-popover {
+  background: var(--sand-1);
+  border-color: var(--sand-6);
+  box-shadow: 0 18px 50px rgba(88, 45, 29, .2);
+}
+
+.diff-popover,
+.diff-popover pre {
+  background: var(--sand-12);
+}
+
+.diff-popover pre {
+  color: var(--sand-3);
+}
+
+.chat-dock {
+  background: var(--sand-1);
+}
+
+.chat-dock-head {
+  background: linear-gradient(135deg, var(--orange-2), var(--sand-1) 68%);
+  border-color: var(--sand-6);
+}
+
+.chat-dock-head span {
+  color: var(--orange-11);
+}
+
+.page-chat-select select {
+  background: var(--sand-3);
+  border-color: var(--sand-6);
+}
+
+.page-chat-select:after {
+  color: var(--sand-11);
+}
+
+.chat-url {
+  background: var(--sand-2);
+  border-color: var(--sand-5);
+  color: var(--sand-10);
+}
+
+.chat-scroll {
+  scrollbar-color: var(--orange-6) transparent;
+}
+
+.chat-composer {
+  background: var(--sand-1);
+  border-color: var(--sand-6);
+}
+
+.chat-composer textarea {
+  background: var(--sand-2);
+  border-color: var(--sand-7);
+}
+
+.chat-composer textarea:focus {
+  background: var(--white);
+  border-color: var(--orange-8);
+  box-shadow: 0 0 0 3px var(--orange-4);
+}
+
+.send-button {
+  background: var(--orange-9);
+  box-shadow: 0 5px 14px rgba(204, 78, 0, .25);
+  transition: background .15s ease, transform .15s ease;
+}
+
+.send-button:hover {
+  background: var(--orange-10);
+  transform: translateY(-1px);
+}
+
+.send-button:focus-visible,
+.icon-button:focus-visible,
+.toolbar-button:focus-visible,
+.address-go:focus-visible,
+.workbench-details summary:focus-visible,
+.modal-close:focus-visible,
+.page-chat-select select:focus-visible {
+  outline: 3px solid var(--orange-5);
+  outline-offset: 2px;
+}
+
+.inline-editor {
+  background: var(--sand-1);
+  border: 1px solid var(--sand-6);
+  box-shadow: 0 24px 80px rgba(88, 45, 29, .3);
+}
+
+.inline-editor::backdrop {
+  background: rgba(33, 32, 28, .62);
+}
+
+.inline-editor-head {
+  background: linear-gradient(135deg, var(--orange-2), var(--sand-1));
+  border-color: var(--sand-6);
+}
+
+.inline-editor-head span {
+  color: var(--orange-11);
+}
+
+.modal-close {
+  background: var(--sand-3);
+  color: var(--sand-11);
+}
+
+.modal-close:hover {
+  background: var(--orange-3);
+  color: var(--orange-12);
+}
+
+.inline-editor textarea {
+  background: var(--sand-1);
+  border-color: var(--sand-7);
+  color: var(--sand-12);
+}
+
+.inline-editor textarea:focus {
+  outline: 0;
+  border-color: var(--orange-8);
+  box-shadow: 0 0 0 3px var(--orange-4);
+}
+
+.inline-editor textarea[readonly] {
+  background: var(--sand-3);
+  color: var(--sand-11);
+}
+
+.workbench-toast {
+  background: var(--sand-12);
+  color: var(--sand-1);
+  box-shadow: 0 12px 30px rgba(33, 32, 28, .25);
+}
+
+.workbench-toast[data-kind="error"] {
+  background: var(--tomato-11);
+}
+
+.workbench-toast[data-kind="success"] {
+  background: var(--jade-11);
+}
