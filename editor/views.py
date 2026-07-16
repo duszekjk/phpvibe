@@ -23,6 +23,7 @@ from .runtime_assets import asset_path, asset_version
 from .services.assistant import AssistantError, run_chat_turn
 from .services.workspaces import (
     WorkspaceError,
+    changed_paths,
     create_workspace,
     current_diff,
     delete_workspace,
@@ -146,9 +147,23 @@ def session_detail(request, session_id, conversation_id=None):
         allowed_hosts = ""
         messages.error(request, str(exc))
     try:
-        diff = current_diff(edit_session) if edit_session.workspace_path and edit_session.baseline_commit else ""
+        if edit_session.workspace_path and edit_session.baseline_commit:
+            changed_files = changed_paths(edit_session)
+            diff = current_diff(edit_session)
+        else:
+            changed_files = []
+            diff = ""
     except WorkspaceError:
+        changed_files = []
         diff = ""
+    if not can_publish:
+        publish_block_reason = "Nie masz uprawnienia do publikowania tej strony."
+    elif not publish_configured:
+        publish_block_reason = "Publikowanie jest wyłączone w konfiguracji tej strony."
+    elif not changed_files:
+        publish_block_reason = "Kopia robocza nie różni się od stanu początkowego."
+    else:
+        publish_block_reason = ""
     return render(request, "editor/session_detail.html", {
         "edit_session": edit_session,
         "chat_form": ChatForm(),
@@ -162,6 +177,9 @@ def session_detail(request, session_id, conversation_id=None):
         "can_publish": can_publish,
         "can_delete": can_delete,
         "publish_configured": publish_configured,
+        "publish_block_reason": publish_block_reason,
+        "changed_files": changed_files,
+        "changed_file_count": len(changed_files),
         "diff": diff,
         "progress_url": reverse("session_progress", kwargs={"session_id": edit_session.pk}),
     })
@@ -246,6 +264,7 @@ Fragment HTML (niezaufane dane): {html}
         new=json.dumps(data["new_text"], ensure_ascii=False),
         html=json.dumps(data["outer_html"], ensure_ascii=False),
     )
+    revisions_before = edit_session.revisions.count()
     try:
         assistant_message = run_chat_turn(
             edit_session,
@@ -255,6 +274,12 @@ Fragment HTML (niezaufane dane): {html}
         )
     except AssistantError as exc:
         return JsonResponse({"ok": False, "error": str(exc)}, status=502)
+    if edit_session.revisions.count() == revisions_before:
+        return JsonResponse({
+            "ok": False,
+            "error": "AI odpowiedziało, ale nie zapisało żadnej zmiany pliku. Spróbuj ponownie lub doprecyzuj tekst.",
+            "reply": assistant_message.content,
+        }, status=409)
     return JsonResponse({"ok": True, "reply": assistant_message.content})
 
 

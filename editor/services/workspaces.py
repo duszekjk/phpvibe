@@ -384,6 +384,39 @@ def commit_change(edit_session: EditSession, summary: str) -> Revision | None:
     )
 
 
+def working_tree_changed_paths(edit_session: EditSession) -> list[str]:
+    """Return editable paths changed on disk, including uncommitted changes."""
+    root = workspace_root(edit_session)
+    config = load_site_config(edit_session.site.config_key)
+    tracked_paths = set(_run_git(root, "ls-files").splitlines())
+    editable_paths = {path.relative_to(root).as_posix() for path in editable_files(root, config)}
+    git_paths = sorted(tracked_paths | editable_paths)
+    if not git_paths:
+        return []
+    output = _run_git(
+        root,
+        "status",
+        "--porcelain=v1",
+        "-z",
+        "--untracked-files=all",
+        "--",
+        *git_paths,
+    )
+    records = output.split("\0")
+    changed = set()
+    index = 0
+    while index < len(records):
+        record = records[index]
+        index += 1
+        if not record:
+            continue
+        status = record[:2]
+        changed.add(record[3:])
+        if "R" in status or "C" in status:
+            index += 1
+    return sorted(changed)
+
+
 @transaction.atomic
 def reset_workspace(edit_session: EditSession) -> None:
     locked = EditSession.objects.select_for_update().get(pk=edit_session.pk)
@@ -424,12 +457,13 @@ def _reset_workspace_locked(locked: EditSession) -> None:
 def changed_paths(edit_session: EditSession) -> list[str]:
     root = workspace_root(edit_session)
     output = _run_git(root, "diff", "--name-only", f"{edit_session.baseline_commit}..HEAD")
-    return [line for line in output.splitlines() if line]
+    committed = {line for line in output.splitlines() if line}
+    return sorted(committed | set(working_tree_changed_paths(edit_session)))
 
 
 def current_diff(edit_session: EditSession, max_chars: int = 120_000) -> str:
     root = workspace_root(edit_session)
-    output = _run_git(root, "diff", "--no-color", "--unified=3", f"{edit_session.baseline_commit}..HEAD", "--")
+    output = _run_git(root, "diff", "--no-color", "--unified=3", edit_session.baseline_commit, "--")
     if len(output) > max_chars:
         return output[:max_chars] + "\n\n[Diff skrócony przez aplikację]"
     return output
@@ -449,6 +483,7 @@ def _publish_workspace_locked(locked: EditSession) -> list[str]:
     if locked.status != EditSession.Status.ACTIVE:
         raise WorkspaceError("Publikować można wyłącznie aktywną rozmowę.")
 
+    commit_change(locked, "Zatwierdzenie zmian roboczych")
     paths = changed_paths(locked)
     if not paths:
         raise WorkspaceError("Nie ma zmian do opublikowania.")

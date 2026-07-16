@@ -12,7 +12,7 @@ from django.urls import reverse
 
 from editor.config import load_site_config
 from editor.forms import StartSessionForm
-from editor.models import ChatMessage, EditSession, PageConversation, Site, SiteMembership
+from editor.models import ChatMessage, EditSession, PageConversation, Revision, Site, SiteMembership
 from editor.navigation import get_or_create_page_conversation, normalize_page_url
 from editor.preview_access import add_preview_token, make_preview_token
 from editor.services.assistant import AssistantError, _replay_input, run_chat_turn
@@ -20,6 +20,7 @@ from editor.services.file_tools import read_file, replace_text, write_file
 from editor.services.workspaces import (
     WorkspaceBusyError,
     WorkspaceError,
+    changed_paths,
     create_workspace,
     publish_workspace,
     refresh_preview_assets,
@@ -149,6 +150,35 @@ class WorkspaceTests(TestCase):
         replace_text(item, "index.php", "stara treść", "nowa treść", False, "Zmiana")
         publish_workspace(item)
         self.assertEqual(stat.S_IMODE(self.source.joinpath("index.php").stat().st_mode), 0o644)
+
+    def test_uncommitted_workspace_edit_is_counted_and_published(self):
+        item = self.new_session()
+        target = Path(item.workspace_path) / "index.php"
+        target.write_text(target.read_text(encoding="utf-8").replace("stara treść", "oczekująca zmiana"), encoding="utf-8")
+        self.client.force_login(self.user)
+
+        response = self.client.get(item.get_absolute_url(), secure=True)
+
+        self.assertEqual(changed_paths(item), ["index.php"])
+        self.assertContains(response, "Zmiany <b>1</b>", html=True)
+        self.assertContains(response, "Zatwierdź i opublikuj")
+        self.assertNotContains(response, "Publikowanie jest wyłączone")
+        self.assertEqual(publish_workspace(item), ["index.php"])
+        self.assertIn("oczekująca zmiana", self.source.joinpath("index.php").read_text(encoding="utf-8"))
+        self.assertTrue(item.revisions.filter(summary="Zatwierdzenie zmian roboczych").exists())
+
+    def test_disabled_publish_configuration_is_explained_in_workbench(self):
+        self._write_config(publish=False)
+        load_site_config.cache_clear()
+        item = self.new_session()
+        replace_text(item, "index.php", "stara treść", "nowa treść", False, "Zmiana")
+        self.client.force_login(self.user)
+
+        response = self.client.get(item.get_absolute_url(), secure=True)
+
+        self.assertContains(response, "Zatwierdź i opublikuj")
+        self.assertContains(response, "Publikowanie jest wyłączone w konfiguracji tej strony.")
+        self.assertContains(response, "disabled")
 
     def test_reset_restores_baseline_and_removes_new_files(self):
         item = self.new_session()
@@ -435,7 +465,16 @@ required = true
         item = self.new_session()
         conversation = item.conversations.get()
         self.client.force_login(self.user)
-        with patch("editor.views.run_chat_turn", return_value=SimpleNamespace(content="Zmieniono tekst.")) as run:
+        def save_revision(*_args, **_kwargs):
+            Revision.objects.create(
+                session=item,
+                commit_hash="a" * 40,
+                summary="Zmieniono tekst",
+                changed_files=["index.php"],
+            )
+            return SimpleNamespace(content="Zmieniono tekst.")
+
+        with patch("editor.views.run_chat_turn", side_effect=save_revision) as run:
             response = self.client.post(
                 f"/rozmowy/{item.pk}/strony/{conversation.pk}/edytuj-tekst/",
                 {
@@ -452,6 +491,28 @@ required = true
         self.assertTrue(response.json()["ok"])
         self.assertEqual(run.call_args.args[1], conversation)
         self.assertIn(conversation.target_url, run.call_args.kwargs["model_text"])
+
+    def test_inline_text_edit_rejects_false_success_without_file_revision(self):
+        item = self.new_session()
+        conversation = item.conversations.get()
+        self.client.force_login(self.user)
+        with patch("editor.views.run_chat_turn", return_value=SimpleNamespace(content="Gotowe.")):
+            response = self.client.post(
+                f"/rozmowy/{item.pk}/strony/{conversation.pk}/edytuj-tekst/",
+                {
+                    "old_text": "Stary nagłówek",
+                    "new_text": "Nowy nagłówek",
+                    "selector": "main > h1",
+                    "tag_name": "h1",
+                    "outer_html": "<h1>Stary nagłówek</h1>",
+                },
+                HTTP_ACCEPT="application/json",
+                secure=True,
+            )
+
+        self.assertEqual(response.status_code, 409)
+        self.assertFalse(response.json()["ok"])
+        self.assertIn("nie zapisało żadnej zmiany", response.json()["error"])
 
     def test_openai_client_configuration_error_is_reported_as_chat_error(self):
         item = self.new_session()

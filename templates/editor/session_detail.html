@@ -65,12 +65,16 @@
       <div class="edit-hint" id="edit-hint"><span>⇧</span> Przytrzymaj Shift i kliknij tekst albo włącz tryb edycji.</div>
       <div class="preview-action-buttons">
         <details class="workbench-details">
-          <summary>Zmiany <b>{{ edit_session.revisions.count }}</b></summary>
+          <summary>Zmiany <b>{{ changed_file_count }}</b></summary>
           <div class="details-popover history-popover">
+            <h3>Zmienione pliki</h3>
+            {% for path in changed_files %}
+              <div class="revision"><strong>{{ path }}</strong></div>
+            {% empty %}<p class="muted">Kopia nie różni się od stanu początkowego.</p>{% endfor %}
             <h3>Historia wspólnej kopii</h3>
             {% for revision in edit_session.revisions.all|slice:":10" %}
               <div class="revision"><strong>{{ revision.summary }}</strong><span>{{ revision.changed_files|join:", "|default:"Stan początkowy" }}</span><time>{{ revision.created_at|date:"d.m H:i" }}</time></div>
-            {% empty %}<p class="muted">Nie zmieniono jeszcze żadnego pliku.</p>{% endfor %}
+            {% empty %}<p class="muted">Nie zapisano jeszcze żadnej zmiany.</p>{% endfor %}
           </div>
         </details>
         {% if diff %}
@@ -83,11 +87,16 @@
           {% csrf_token %}<input type="hidden" name="confirmation" value="RESET"><input type="hidden" name="return_conversation" value="{{ conversation.pk }}">
           <button class="toolbar-button subtle-danger" type="submit">Przywróć początek</button>
         </form>
-        {% if can_publish and publish_configured and edit_session.status == "active" %}
-          <form method="post" action="{% url 'publish_session' edit_session.pk %}" onsubmit="return confirm('Opublikować zmiany na stronie?');">
-            {% csrf_token %}<input type="hidden" name="confirmation" value="PUBLISH"><input type="hidden" name="return_conversation" value="{{ conversation.pk }}">
-            <button class="button success" type="submit">Opublikuj</button>
-          </form>
+        {% if edit_session.status == "active" %}
+          {% if not publish_block_reason %}
+            <form method="post" action="{% url 'publish_session' edit_session.pk %}" onsubmit="return confirm('Zatwierdzić i opublikować {{ changed_file_count }} zmienionych plików na stronie?');">
+              {% csrf_token %}<input type="hidden" name="confirmation" value="PUBLISH"><input type="hidden" name="return_conversation" value="{{ conversation.pk }}">
+              <button class="button success" type="submit">Zatwierdź i opublikuj</button>
+            </form>
+          {% else %}
+            <button class="button success" type="button" disabled title="{{ publish_block_reason }}">Zatwierdź i opublikuj</button>
+            <span class="publish-block-reason">{{ publish_block_reason }}</span>
+          {% endif %}
         {% endif %}
         {% if can_delete %}
           <details class="workbench-details">

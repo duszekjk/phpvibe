@@ -64,7 +64,9 @@ def write_file(edit_session: EditSession, path: str, content: str, summary: str)
     ensure_editable(edit_session, target)
     atomic_write(target, content)
     revision = commit_change(edit_session, summary or f"Zmiana pliku {path}")
-    return json.dumps({"ok": True, "path": path, "commit": revision.commit_hash if revision else None}, ensure_ascii=False)
+    if revision is None:
+        return json.dumps({"ok": False, "path": path, "error": "Treść pliku nie uległa zmianie."}, ensure_ascii=False)
+    return json.dumps({"ok": True, "path": path, "commit": revision.commit_hash}, ensure_ascii=False)
 
 
 def replace_text(
@@ -86,7 +88,9 @@ def replace_text(
     updated = content.replace(old_text, new_text, -1 if replace_all else 1)
     atomic_write(target, updated)
     revision = commit_change(edit_session, summary or f"Zmiana w pliku {path}")
-    return json.dumps({"ok": True, "path": path, "replacements": count if replace_all else 1, "commit": revision.commit_hash if revision else None}, ensure_ascii=False)
+    if revision is None:
+        return json.dumps({"ok": False, "path": path, "error": "Treść pliku nie uległa zmianie."}, ensure_ascii=False)
+    return json.dumps({"ok": True, "path": path, "replacements": count if replace_all else 1, "commit": revision.commit_hash}, ensure_ascii=False)
 
 
 TOOL_SCHEMAS = [

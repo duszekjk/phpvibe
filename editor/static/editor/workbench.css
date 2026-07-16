@@ -11,6 +11,10 @@
 @media(max-width:760px){.editor-mode{overflow:auto}.editor-mode .page{width:calc(100% - 14px)}.editor-workbench{height:auto;min-height:0;grid-template-columns:1fr}.preview-stage{height:68vh;min-height:520px}.chat-dock{height:70vh;min-height:500px}.edit-hint{display:none}.browser-nav{display:none}.preview-actions{justify-content:flex-end}.workbench-heading .status{display:none}}
 @media(max-width:520px){.browser-toolbar{gap:4px;padding:7px}.browser-toolbar>.icon-button:last-child{display:none}.address-form input{font-size:11px}.preview-action-buttons .subtle-danger{display:none}.editor-mode .composer{flex-direction:row}.details-popover{position:fixed;left:8px;right:8px;bottom:64px;width:auto}.workbench-heading h1{font-size:17px}}
 
+.publish-block-reason{max-width:190px;color:#8a4b20;font-size:10px;line-height:1.25}
+.preview-action-buttons .button:disabled{cursor:not-allowed;filter:saturate(.35)}
+@media(max-width:980px){.publish-block-reason{display:none}}
+
 /* Ciepła warstwa aplikacji: Radix Sand dla powierzchni, Orange dla interakcji. */
 .editor-mode {
   background:
