@@ -12,7 +12,6 @@
   let editMode = false;
   let bridgeReady = false;
   let navigating = false;
-  let initialPreviewPageSeen = false;
   const navigationGuardKey = `phpvibe-preview-navigation:${window.location.pathname}`;
 
   const copyProgress = document.getElementById("copy-progress");
@@ -136,18 +135,16 @@
     }
     if (event.data.type === "page-changed") {
       loading?.classList.add("hidden");
-      if (!initialPreviewPageSeen) {
-        initialPreviewPageSeen = true;
-        return;
-      }
-      const canonical = previewToCanonical(event.data.pageUrl);
-      if (canonical) switchConversation(canonical);
     }
     if (event.data.type === "link-clicked") {
       try {
         const target = new URL(event.data.href);
+        const previewOrigin = root.dataset.previewBase ? new URL(root.dataset.previewBase).origin : "";
         const allowedHosts = new Set((root.dataset.allowedHosts || "").split(",").filter(Boolean));
-        if (allowedHosts.has(target.hostname.toLowerCase())) switchConversation(target.href);
+        if (target.origin === previewOrigin) {
+          const canonical = previewToCanonical(target.href);
+          if (canonical) switchConversation(canonical);
+        } else if (allowedHosts.has(target.hostname.toLowerCase())) switchConversation(target.href);
         else window.open(target.href, "_blank", "noopener");
       } catch (_error) { showToast("Nieprawidłowy adres odnośnika.", "error"); }
     }

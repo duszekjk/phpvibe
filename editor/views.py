@@ -24,6 +24,7 @@ from .services.workspaces import (
     current_diff,
     delete_workspace,
     publish_workspace,
+    refresh_preview_assets,
     reset_workspace,
 )
 
@@ -92,6 +93,11 @@ def session_detail(request, session_id, conversation_id=None):
         and bool(edit_session.workspace_path)
         and bool(edit_session.baseline_commit)
     )
+    if preview_available:
+        try:
+            refresh_preview_assets(edit_session)
+        except WorkspaceError as exc:
+            messages.error(request, f"Nie udało się odświeżyć warstwy podglądu: {exc}")
     try:
         config = load_site_config(edit_session.site.config_key)
         preview_base_url = config.preview_url(edit_session.pk)

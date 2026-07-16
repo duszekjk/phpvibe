@@ -21,6 +21,7 @@ from editor.services.workspaces import (
     WorkspaceError,
     create_workspace,
     publish_workspace,
+    refresh_preview_assets,
     reset_workspace,
     safe_path,
     workspace_operation_lock,
@@ -159,6 +160,28 @@ class WorkspaceTests(TestCase):
         self.assertTrue((root / "__phpvibe_preview" / "preview-bridge.js").is_file())
         self.assertTrue((root / "__phpvibe_preview" / "preview.css").is_file())
         self.assertEqual(_replay_input(item.conversations.get()), [])
+
+    def test_existing_workspace_refreshes_preview_runtime_without_a_new_session(self):
+        item = self.new_session()
+        bridge = Path(item.workspace_path) / "__phpvibe_preview" / "preview-bridge.js"
+        bridge.write_text("obsolete bridge", encoding="utf-8")
+
+        refresh_preview_assets(item)
+
+        content = bridge.read_text(encoding="utf-8")
+        self.assertIn('post("link-clicked", { href: targetUrl.href })', content)
+        self.assertNotIn("obsolete bridge", content)
+
+    def test_preview_runtime_is_not_committed_with_a_content_edit(self):
+        item = self.new_session()
+        bridge = Path(item.workspace_path) / "__phpvibe_preview" / "preview-bridge.js"
+        bridge.write_text("runtime update", encoding="utf-8")
+
+        replace_text(item, "index.php", "stara treść", "nowa treść", False, "Zmiana")
+
+        revision = item.revisions.get()
+        self.assertEqual(revision.changed_files, ["index.php"])
+        self.assertEqual(bridge.read_text(encoding="utf-8"), "runtime update")
 
     def test_reset_restores_files_ignored_by_the_legacy_site(self):
         (self.source / ".gitignore").write_text("generated.txt\ncache.txt\n", encoding="utf-8")

@@ -85,5 +85,18 @@ listeners.message({
   },
 });
 
-assert.equal(fetchCalls, 1, "A real navigation after initial synchronization was ignored");
+assert.equal(fetchCalls, 0, "A page-changed event caused an automatic iframe reload");
+
+listeners.message({
+  source: previewWindow,
+  origin: "https://tmp.example.test",
+  data: {
+    source: "phpvibe-preview",
+    type: "link-clicked",
+    href: "https://tmp.example.test/vibe/9abeb6c9-4529-4a16-a408-529101b3bd40/"
+      + "__vibe_token/signed-token/kontakt?__vibe_token=signed-token",
+  },
+});
+
+assert.equal(fetchCalls, 1, "An explicit preview link click did not navigate to its page conversation");
 console.log("workbench navigation regression test: OK");

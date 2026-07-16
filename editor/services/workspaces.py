@@ -44,7 +44,7 @@ def _run_git(root: Path, *args: str) -> str:
     )
     if process.returncode:
         raise WorkspaceError(process.stderr.strip() or process.stdout.strip() or "Polecenie Git nie powiodło się.")
-    return process.stdout.strip()
+    return process.stdout.rstrip()
 
 
 def _ignore(config: SiteConfig):
@@ -84,8 +84,35 @@ def install_preview_layer(destination: Path, config: SiteConfig) -> list[dict[st
     asset_root = destination / PREVIEW_ASSET_DIR
     if asset_root.exists():
         raise WorkspaceError(f"Strona używa zastrzeżonego katalogu {PREVIEW_ASSET_DIR}.")
-    source_root = settings.BASE_DIR / "editor" / "static" / "editor"
     asset_root.mkdir()
+    _write_preview_assets(asset_root)
+
+    applied = []
+    for replacement in config.preview_replacements:
+        target = (destination / replacement.path).resolve()
+        if destination not in target.parents or not target.is_file() or target.is_symlink():
+            if replacement.required:
+                raise WorkspaceError(f"Nie można zastosować transformacji podglądu do {replacement.path}.")
+            continue
+        content = target.read_text(encoding="utf-8")
+        count = content.count(replacement.production_text)
+        if count != 1:
+            if replacement.required:
+                raise WorkspaceError(
+                    f"Transformacja podglądu {replacement.path} oczekiwała jednego fragmentu, znaleziono: {count}."
+                )
+            continue
+        atomic_write(target, content.replace(replacement.production_text, replacement.preview_text, 1))
+        applied.append({
+            "path": replacement.path,
+            "production_text": replacement.production_text,
+            "preview_text": replacement.preview_text,
+        })
+    return applied
+
+
+def _write_preview_assets(asset_root: Path) -> None:
+    source_root = settings.BASE_DIR / "editor" / "static" / "editor"
     panel_origin = settings.PANEL_ORIGIN
     try:
         parsed_origin = urlsplit(panel_origin)
@@ -110,28 +137,13 @@ def install_preview_layer(destination: Path, config: SiteConfig) -> list[dict[st
     atomic_write(asset_root / "preview-bridge.js", bridge_source)
     shutil.copy2(source_root / "preview.css", asset_root / "preview.css")
 
-    applied = []
-    for replacement in config.preview_replacements:
-        target = (destination / replacement.path).resolve()
-        if destination not in target.parents or not target.is_file() or target.is_symlink():
-            if replacement.required:
-                raise WorkspaceError(f"Nie można zastosować transformacji podglądu do {replacement.path}.")
-            continue
-        content = target.read_text(encoding="utf-8")
-        count = content.count(replacement.production_text)
-        if count != 1:
-            if replacement.required:
-                raise WorkspaceError(
-                    f"Transformacja podglądu {replacement.path} oczekiwała jednego fragmentu, znaleziono: {count}."
-                )
-            continue
-        atomic_write(target, content.replace(replacement.production_text, replacement.preview_text, 1))
-        applied.append({
-            "path": replacement.path,
-            "production_text": replacement.production_text,
-            "preview_text": replacement.preview_text,
-        })
-    return applied
+
+def refresh_preview_assets(edit_session: EditSession) -> None:
+    """Update preview-only runtime files in an existing workspace."""
+    asset_root = workspace_root(edit_session) / PREVIEW_ASSET_DIR
+    if not asset_root.is_dir() or asset_root.is_symlink():
+        raise WorkspaceError("Brakuje technicznej warstwy podglądu w kopii roboczej.")
+    _write_preview_assets(asset_root)
 
 
 def remove_preview_layer(edit_session: EditSession, relative_path: str, content: str) -> str:
@@ -318,10 +330,15 @@ def atomic_write(path: Path, content: str) -> None:
 
 def commit_change(edit_session: EditSession, summary: str) -> Revision | None:
     root = workspace_root(edit_session)
-    changed = [line for line in _run_git(root, "status", "--short").splitlines() if line]
+    preview_exclusion = f":(exclude){PREVIEW_ASSET_DIR}/**"
+    changed = [
+        line for line in _run_git(
+            root, "status", "--short", "--untracked-files=all", "--", ".", preview_exclusion
+        ).splitlines() if line
+    ]
     if not changed:
         return None
-    _run_git(root, "add", "--all", "--force")
+    _run_git(root, "add", "--all", "--force", "--", ".", preview_exclusion)
     _run_git(root, "commit", "--quiet", "-m", summary[:240])
     commit_hash = _run_git(root, "rev-parse", "HEAD")
     files = [line[3:] for line in changed]
