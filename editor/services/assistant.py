@@ -7,6 +7,7 @@ from editor.config import load_site_config
 from editor.models import ChatMessage, EditSession, PageConversation
 
 from .file_tools import TOOL_SCHEMAS, execute_tool
+from .workspaces import WorkspaceBusyError, workspace_operation_lock
 
 
 class AssistantError(RuntimeError):
@@ -52,6 +53,20 @@ def run_chat_turn(
     *,
     model_text: str | None = None,
 ) -> ChatMessage:
+    try:
+        with workspace_operation_lock(edit_session):
+            return _run_chat_turn_locked(edit_session, conversation, user_text, model_text=model_text)
+    except WorkspaceBusyError as exc:
+        raise AssistantError(str(exc)) from exc
+
+
+def _run_chat_turn_locked(
+    edit_session: EditSession,
+    conversation: PageConversation,
+    user_text: str,
+    *,
+    model_text: str | None = None,
+) -> ChatMessage:
     locked = EditSession.objects.select_related("site").get(pk=edit_session.pk)
     if locked.status != EditSession.Status.ACTIVE:
         raise AssistantError("Rozmowa nie jest aktywna.")
@@ -72,7 +87,10 @@ def run_chat_turn(
     except ImportError as exc:
         raise AssistantError("Brakuje pakietu openai. Zainstaluj zależności z requirements.txt.") from exc
 
-    client = OpenAI()
+    try:
+        client = OpenAI()
+    except Exception as exc:
+        raise AssistantError("Nie można uruchomić klienta OpenAI. Sprawdź konfigurację klucza API.") from exc
     request = {
         "model": settings.OPENAI_MODEL,
         "instructions": system_instructions(locked, page),
@@ -88,7 +106,7 @@ def run_chat_turn(
 
     try:
         response = client.responses.create(**request)
-        for _round in range(settings.OPENAI_MAX_TOOL_ROUNDS):
+        for round_number in range(settings.OPENAI_MAX_TOOL_ROUNDS + 1):
             calls = [item for item in response.output if item.type == "function_call"]
             if not calls:
                 content = response.output_text.strip()
@@ -104,6 +122,9 @@ def run_chat_turn(
                 page.last_response_id = response.id
                 page.save(update_fields=["last_response_id", "updated_at"])
                 return assistant_message
+
+            if round_number == settings.OPENAI_MAX_TOOL_ROUNDS:
+                break
 
             outputs = []
             for call in calls:

@@ -6,8 +6,8 @@ is_active = true
 root_path = "/Volumes/FPEX/jerozolima/strona/jerozolima"
 allowed_hosts = ["jerozolima.org", "www.jerozolima.org"]
 
-# Reverse proxy powinien mapować ten URL na VIBE_WORKSPACE_ROOT/{session_id}/site,
-# chronić go podpisanym __vibe_token i wstrzykiwać static/editor/preview-bridge.js.
+# Apache mapuje ten URL na VIBE_WORKSPACE_ROOT/{session_id}/site i chroni go
+# podpisanym __vibe_token. JS/CSS są wstrzykiwane przez preview_replacements poniżej.
 preview_url_template = "https://tmp.jerozolima.org/vibe/{session_id}/"
 
 allowed_extensions = [".php", ".css", ".js", ".html", ".txt", ".md", ".ics"]
@@ -19,11 +19,13 @@ publish_enabled = false
 backup_path = "/var/backups/phpvibe"
 
 description = """
-Klasyczna strona PHP bez frameworka. index.php odczytuje parametry strona i podstrona,
-a następnie dołącza główny plik <strona><podstrona>.php. Menu znajduje się w
-pliki/opisy/menu.php. Wiele treści redakcyjnych jest w pliki/opisy/*.php,
-logika pomocnicza w pliki/php/*.php, style w pliki/css/*.css, a wydarzenia w kalendarz/*.ics.
-Najpierw analizuj parametry URL i include w głównym pliku, potem szukaj tekstu.
+Zweryfikowana struktura klasycznej strony PHP bez frameworka. index.php odczytuje parametry
+strona i podstrona, łączy je bez separatora w nazwę <strona><podstrona>, a następnie dołącza
+z katalogu głównego plik <strona><podstrona>.php. Dla tej samej nazwy próbuje też wczytać
+pliki/css/<strona><podstrona>.css. Menu i mapowanie podstron są w pliki/opisy/menu.php.
+Wiele treści redakcyjnych znajduje się w pliki/opisy/*.php, logika pomocnicza w
+pliki/php/*.php, a wydarzenia w kalendarz/*.ics. Najpierw analizuj parametry pełnego URL-u,
+potem index.php i właściwy plik strony, a dopiero później szukaj tekstu w dołączanych plikach.
 """
 
 # Testowa kopia przekierowuje obecnie index.php na stronę publiczną. W podglądzie
@@ -38,3 +40,11 @@ header('Location: https://jerozolima.org/');
 preview_text = """<?php
 // __PHPVIBE_PREVIEW_REDIRECT_DISABLED__: wyłączone wyłącznie w kopii roboczej.
 """
+
+# Jerozolima generuje <head> w PHP, więc warstwę edycji dodajemy wyłącznie do kopii.
+# Publikator odwraca tę transformację przed wysłaniem index.php na produkcję.
+[[preview_replacements]]
+path = "index.php"
+required = true
+production_text = '''    echo "<head>";'''
+preview_text = '''    echo '<head><link rel="stylesheet" href="__phpvibe_preview/preview.css"><script defer src="__phpvibe_preview/preview-bridge.js"></script>';'''

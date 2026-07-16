@@ -9,11 +9,18 @@ from .models import EditSession, PageConversation
 
 
 def normalize_page_url(url: str, allowed_hosts: frozenset[str]) -> str:
-    parts = urlsplit(url.strip())
+    try:
+        parts = urlsplit(url.strip())
+    except ValueError as exc:
+        raise ValidationError("Adres jest nieprawidłowy.") from exc
     hostname = (parts.hostname or "").lower()
     if parts.scheme not in {"http", "https"} or hostname not in allowed_hosts:
         raise ValidationError("Ten adres nie należy do edytowanej strony.")
-    port = f":{parts.port}" if parts.port else ""
+    try:
+        parsed_port = parts.port
+    except ValueError as exc:
+        raise ValidationError("Adres zawiera nieprawidłowy port.") from exc
+    port = f":{parsed_port}" if parsed_port else ""
     netloc = hostname + port
     path = parts.path or "/"
     query = urlencode(parse_qsl(parts.query, keep_blank_values=True), doseq=True)

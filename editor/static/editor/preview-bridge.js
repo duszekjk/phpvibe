@@ -5,10 +5,11 @@
 
   let editMode = false;
   let highlighted = null;
+  const panelOrigin = "__PHPVIBE_PANEL_ORIGIN__";
   const candidates = "h1,h2,h3,h4,h5,h6,p,a,button,label,li,td,th,figcaption,blockquote,span,div";
 
   function post(type, payload = {}) {
-    window.parent.postMessage({ source: "phpvibe-preview", type, ...payload }, "*");
+    window.parent.postMessage({ source: "phpvibe-preview", type, ...payload }, panelOrigin);
   }
 
   function clearHighlight() {
@@ -117,7 +118,7 @@
   }, true);
 
   window.addEventListener("message", event => {
-    if (event.source !== window.parent || !event.data) return;
+    if (event.source !== window.parent || event.origin !== panelOrigin || !event.data) return;
     if (event.data.type === "phpvibe:set-edit-mode") {
       editMode = Boolean(event.data.enabled);
       document.documentElement.classList.toggle("phpvibe-edit-mode", editMode);

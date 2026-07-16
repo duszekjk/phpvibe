@@ -216,7 +216,7 @@ def publish_session(request, session_id):
 
 
 def preview_authorize(request, session_id):
-    """Endpoint dla nginx auth_request; nie udostępnia samych plików podglądu."""
+    """Wewnętrzny endpoint autoryzacyjny Apache; nie udostępnia plików podglądu."""
     user = request.user if request.user.is_authenticated else None
     if user is None:
         token = request.GET.get("token") or request.headers.get("X-Preview-Token", "")

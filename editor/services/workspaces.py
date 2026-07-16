@@ -1,13 +1,17 @@
 from __future__ import annotations
 
+from contextlib import contextmanager
+import fcntl
 import hashlib
 import json
 import os
 from pathlib import Path
 import shutil
+import stat
 import subprocess
 import tempfile
 from typing import Iterable
+from urllib.parse import urlsplit
 
 from django.conf import settings
 from django.core.exceptions import PermissionDenied
@@ -18,6 +22,10 @@ from editor.models import ChatMessage, EditSession, Revision
 
 
 class WorkspaceError(RuntimeError):
+    pass
+
+
+class WorkspaceBusyError(WorkspaceError):
     pass
 
 
@@ -39,11 +47,21 @@ def _run_git(root: Path, *args: str) -> str:
 
 
 def _ignore(config: SiteConfig):
+    source_root = config.root_path.resolve()
+
     def callback(directory: str, names: list[str]) -> set[str]:
-        return {
-            name for name in names
-            if name in config.ignored_names or (Path(directory) / name).is_symlink()
-        }
+        ignored = set()
+        parent = Path(directory).resolve()
+        for name in names:
+            candidate = parent / name
+            try:
+                relative = candidate.relative_to(source_root).as_posix()
+            except ValueError:
+                ignored.add(name)
+                continue
+            if name in config.ignored_names or candidate.is_symlink() or config.is_protected(relative):
+                ignored.add(name)
+        return ignored
 
     return callback
 
@@ -54,7 +72,28 @@ def install_preview_layer(destination: Path, config: SiteConfig) -> list[dict[st
         raise WorkspaceError(f"Strona używa zastrzeżonego katalogu {PREVIEW_ASSET_DIR}.")
     source_root = settings.BASE_DIR / "editor" / "static" / "editor"
     asset_root.mkdir()
-    shutil.copy2(source_root / "preview-bridge.js", asset_root / "preview-bridge.js")
+    panel_origin = settings.PANEL_ORIGIN
+    try:
+        parsed_origin = urlsplit(panel_origin)
+        parsed_origin.port
+    except ValueError as exc:
+        raise WorkspaceError("VIBE_PANEL_ORIGIN zawiera nieprawidłowy adres lub port.") from exc
+    if (
+        parsed_origin.scheme not in {"http", "https"}
+        or not parsed_origin.hostname
+        or parsed_origin.username
+        or parsed_origin.password
+        or parsed_origin.path
+        or parsed_origin.query
+        or parsed_origin.fragment
+    ):
+        raise WorkspaceError("VIBE_PANEL_ORIGIN musi być originem HTTP(S), bez ścieżki, zapytania i fragmentu.")
+    bridge_source = (source_root / "preview-bridge.js").read_text(encoding="utf-8")
+    placeholder = '"__PHPVIBE_PANEL_ORIGIN__"'
+    if bridge_source.count(placeholder) != 1:
+        raise WorkspaceError("Szablon mostu podglądu ma nieprawidłowy placeholder originu panelu.")
+    bridge_source = bridge_source.replace(placeholder, json.dumps(panel_origin), 1)
+    atomic_write(asset_root / "preview-bridge.js", bridge_source)
     shutil.copy2(source_root / "preview.css", asset_root / "preview.css")
 
     applied = []
@@ -132,7 +171,8 @@ def create_workspace(edit_session: EditSession) -> None:
         shutil.copytree(config.root_path, destination, ignore=_ignore(config), copy_function=shutil.copy2)
         preview_transforms = install_preview_layer(destination, config)
         _run_git(destination, "init", "--quiet")
-        _run_git(destination, "add", "--all")
+        # The legacy site's .gitignore must not weaken PHP Vibe's own history.
+        _run_git(destination, "add", "--all", "--force")
         _run_git(destination, "commit", "--quiet", "-m", "Stan początkowy rozmowy")
         baseline = _run_git(destination, "rev-parse", "HEAD")
         manifest = build_manifest(config.root_path, config)
@@ -159,6 +199,24 @@ def workspace_root(edit_session: EditSession) -> Path:
     return root
 
 
+@contextmanager
+def workspace_operation_lock(edit_session: EditSession):
+    """Prevent concurrent edits, resets, and publishes for one workspace."""
+    lock_path = workspace_root(edit_session).parent / ".operation.lock"
+    handle = lock_path.open("a+")
+    try:
+        try:
+            fcntl.flock(handle.fileno(), fcntl.LOCK_EX | fcntl.LOCK_NB)
+        except BlockingIOError as exc:
+            raise WorkspaceBusyError("Inna operacja na tej kopii roboczej jeszcze trwa.") from exc
+        yield
+    finally:
+        try:
+            fcntl.flock(handle.fileno(), fcntl.LOCK_UN)
+        finally:
+            handle.close()
+
+
 def safe_path(edit_session: EditSession, relative_path: str, *, must_exist: bool = True) -> Path:
     if not relative_path or "\x00" in relative_path:
         raise PermissionDenied("Nieprawidłowa ścieżka pliku.")
@@ -176,6 +234,8 @@ def safe_path(edit_session: EditSession, relative_path: str, *, must_exist: bool
 def ensure_editable(edit_session: EditSession, path: Path) -> None:
     config = load_site_config(edit_session.site.config_key)
     relative = path.relative_to(workspace_root(edit_session)).as_posix()
+    if any(part in config.ignored_names for part in Path(relative).parts):
+        raise PermissionDenied("Ten katalog jest wyłączony z edycji.")
     if config.is_protected(relative):
         raise PermissionDenied("Ten plik jest chroniony przez konfigurację strony.")
     if path.suffix.lower() not in config.allowed_extensions:
@@ -187,8 +247,10 @@ def atomic_write(path: Path, content: str) -> None:
     if len(encoded) > settings.FILE_MAX_BYTES:
         raise WorkspaceError(f"Plik przekracza limit {settings.FILE_MAX_BYTES} bajtów.")
     path.parent.mkdir(parents=True, exist_ok=True)
+    mode = stat.S_IMODE(path.stat().st_mode) if path.exists() else 0o644
     descriptor, temp_name = tempfile.mkstemp(prefix=f".{path.name}.", dir=path.parent)
     try:
+        os.fchmod(descriptor, mode)
         with os.fdopen(descriptor, "wb") as handle:
             handle.write(encoded)
             handle.flush()
@@ -204,7 +266,7 @@ def commit_change(edit_session: EditSession, summary: str) -> Revision | None:
     changed = [line for line in _run_git(root, "status", "--short").splitlines() if line]
     if not changed:
         return None
-    _run_git(root, "add", "--all")
+    _run_git(root, "add", "--all", "--force")
     _run_git(root, "commit", "--quiet", "-m", summary[:240])
     commit_hash = _run_git(root, "rev-parse", "HEAD")
     files = [line[3:] for line in changed]
@@ -219,11 +281,16 @@ def commit_change(edit_session: EditSession, summary: str) -> Revision | None:
 @transaction.atomic
 def reset_workspace(edit_session: EditSession) -> None:
     locked = EditSession.objects.select_for_update().get(pk=edit_session.pk)
+    with workspace_operation_lock(locked):
+        _reset_workspace_locked(locked)
+
+
+def _reset_workspace_locked(locked: EditSession) -> None:
     if locked.status not in {EditSession.Status.ACTIVE, EditSession.Status.PUBLISHED}:
         raise WorkspaceError("Tej rozmowy nie można teraz przywrócić.")
     root = workspace_root(locked)
     _run_git(root, "reset", "--hard", locked.baseline_commit)
-    _run_git(root, "clean", "-fd")
+    _run_git(root, "clean", "-fdx")
     Revision.objects.create(
         session=locked,
         commit_hash=locked.baseline_commit,
@@ -260,6 +327,11 @@ def current_diff(edit_session: EditSession, max_chars: int = 120_000) -> str:
 @transaction.atomic
 def publish_workspace(edit_session: EditSession) -> list[str]:
     locked = EditSession.objects.select_for_update().select_related("site").get(pk=edit_session.pk)
+    with workspace_operation_lock(locked):
+        return _publish_workspace_locked(locked)
+
+
+def _publish_workspace_locked(locked: EditSession) -> list[str]:
     config = load_site_config(locked.site.config_key)
     if not config.publish_enabled or not config.backup_path:
         raise WorkspaceError("Publikowanie nie jest włączone w konfiguracji tej strony.")

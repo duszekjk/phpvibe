@@ -1,20 +1,29 @@
 from pathlib import Path
+import stat
 import tempfile
 from types import SimpleNamespace
-from unittest.mock import patch
+from unittest.mock import Mock, patch
 
 from django.contrib.auth import get_user_model
-from django.core.exceptions import PermissionDenied
+from django.core.exceptions import ImproperlyConfigured, PermissionDenied, ValidationError
 from django.test import TestCase, override_settings
 
 from editor.config import load_site_config
 from editor.forms import StartSessionForm
 from editor.models import EditSession, Site, SiteMembership
-from editor.navigation import get_or_create_page_conversation
+from editor.navigation import get_or_create_page_conversation, normalize_page_url
 from editor.preview_access import make_preview_token
-from editor.services.assistant import _replay_input
+from editor.services.assistant import AssistantError, _replay_input, run_chat_turn
 from editor.services.file_tools import read_file, replace_text, write_file
-from editor.services.workspaces import WorkspaceError, create_workspace, publish_workspace, reset_workspace, safe_path
+from editor.services.workspaces import (
+    WorkspaceBusyError,
+    WorkspaceError,
+    create_workspace,
+    publish_workspace,
+    reset_workspace,
+    safe_path,
+    workspace_operation_lock,
+)
 
 
 class WorkspaceTests(TestCase):
@@ -48,7 +57,7 @@ class WorkspaceTests(TestCase):
 
     def _write_config(self, *, publish=True):
         (self.config_dir / "test.toml").write_text(
-            f'''name = "Test"\nroot_path = "{self.source}"\nallowed_hosts = ["example.org"]\npreview_url_template = "https://preview.example/{{session_id}}/"\nallowed_extensions = [".php", ".css"]\npublish_enabled = {str(publish).lower()}\nbackup_path = "{self.backup_dir}"\ndescription = "Testowa strona PHP"\n[[preview_replacements]]\npath = "index.php"\nproduction_text = "<?php "\npreview_text = "<?php /* __PHPVIBE_PREVIEW_TEST__ */ "\nrequired = true\n''',
+            f'''name = "Test"\nroot_path = "{self.source}"\nallowed_hosts = ["example.org"]\npreview_url_template = "https://preview.example/{{session_id}}/"\nallowed_extensions = [".php", ".css", ".txt"]\npublish_enabled = {str(publish).lower()}\nbackup_path = "{self.backup_dir}"\ndescription = "Testowa strona PHP"\n[[preview_replacements]]\npath = "index.php"\nproduction_text = "<?php "\npreview_text = "<?php /* __PHPVIBE_PREVIEW_TEST__ */ "\nrequired = true\n''',
             encoding="utf-8",
         )
 
@@ -69,11 +78,74 @@ class WorkspaceTests(TestCase):
         with self.assertRaises(PermissionDenied):
             safe_path(item, "../../sekret.txt", must_exist=False)
 
+    def test_workspace_rejects_second_concurrent_operation(self):
+        item = self.new_session()
+        with workspace_operation_lock(item):
+            with self.assertRaises(WorkspaceBusyError):
+                with workspace_operation_lock(item):
+                    pass
+
+    @override_settings(PANEL_ORIGIN="https://panel.example")
+    def test_preview_bridge_is_bound_to_configured_panel_origin(self):
+        item = self.new_session()
+        bridge = (Path(item.workspace_path) / "__phpvibe_preview" / "preview-bridge.js").read_text(encoding="utf-8")
+        self.assertIn('const panelOrigin = "https://panel.example";', bridge)
+        self.assertNotIn('postMessage({ source: "phpvibe-preview", type, ...payload }, "*")', bridge)
+        self.assertIn("event.origin !== panelOrigin", bridge)
+
+    @override_settings(PANEL_ORIGIN="https://panel.example/path")
+    def test_preview_bridge_rejects_non_origin_panel_url(self):
+        item = EditSession.objects.create(
+            site=self.site,
+            owner=self.user,
+            title="Zmiana treści",
+            target_url="https://example.org/",
+        )
+        with self.assertRaisesRegex(WorkspaceError, "VIBE_PANEL_ORIGIN"):
+            create_workspace(item)
+
+    @override_settings(PANEL_ORIGIN="https://panel.example:not-a-port")
+    def test_preview_bridge_rejects_invalid_panel_port(self):
+        item = EditSession.objects.create(
+            site=self.site,
+            owner=self.user,
+            title="Zmiana treści",
+            target_url="https://example.org/",
+        )
+        with self.assertRaisesRegex(WorkspaceError, "VIBE_PANEL_ORIGIN"):
+            create_workspace(item)
+
     def test_protected_file_is_hidden_from_assistant(self):
         (self.source / "secret.php").write_text("<?php return 'token';", encoding="utf-8")
         item = self.new_session()
-        with self.assertRaises(PermissionDenied):
+        with self.assertRaises(FileNotFoundError):
             read_file(item, "secret.php")
+
+    def test_protected_file_is_not_copied_into_executable_preview(self):
+        (self.source / "secret.php").write_text("<?php return 'token';", encoding="utf-8")
+        item = self.new_session()
+        self.assertFalse((Path(item.workspace_path) / "secret.php").exists())
+
+    def test_assistant_cannot_create_file_in_ignored_directory(self):
+        item = self.new_session()
+        with self.assertRaises(PermissionDenied):
+            write_file(item, "vendor/backdoor.php", "<?php", "Niedozwolony plik")
+
+    def test_edit_preserves_file_permissions(self):
+        self.source.joinpath("index.php").chmod(0o644)
+        item = self.new_session()
+        target = Path(item.workspace_path) / "index.php"
+        original_mode = stat.S_IMODE(target.stat().st_mode)
+        self.assertEqual(original_mode, 0o644)
+        replace_text(item, "index.php", "stara treść", "nowa treść", False, "Zmiana")
+        self.assertEqual(stat.S_IMODE(target.stat().st_mode), original_mode)
+
+    def test_publish_preserves_production_file_permissions(self):
+        self.source.joinpath("index.php").chmod(0o644)
+        item = self.new_session()
+        replace_text(item, "index.php", "stara treść", "nowa treść", False, "Zmiana")
+        publish_workspace(item)
+        self.assertEqual(stat.S_IMODE(self.source.joinpath("index.php").stat().st_mode), 0o644)
 
     def test_reset_restores_baseline_and_removes_new_files(self):
         item = self.new_session()
@@ -87,6 +159,19 @@ class WorkspaceTests(TestCase):
         self.assertTrue((root / "__phpvibe_preview" / "preview.css").is_file())
         self.assertEqual(_replay_input(item.conversations.get()), [])
 
+    def test_reset_restores_files_ignored_by_the_legacy_site(self):
+        (self.source / ".gitignore").write_text("generated.txt\ncache.txt\n", encoding="utf-8")
+        (self.source / "generated.txt").write_text("stan początkowy", encoding="utf-8")
+        item = self.new_session()
+        root = Path(item.workspace_path)
+
+        replace_text(item, "generated.txt", "stan początkowy", "zmieniony", False, "Zmiana")
+        (root / "cache.txt").write_text("plik utworzony w podglądzie", encoding="utf-8")
+        reset_workspace(item)
+
+        self.assertEqual((root / "generated.txt").read_text(encoding="utf-8"), "stan początkowy")
+        self.assertFalse((root / "cache.txt").exists())
+
     def test_form_rejects_url_from_another_host(self):
         form = StartSessionForm(
             data={"site": self.site.pk, "title": "Test", "target_url": "https://evil.example/path"},
@@ -94,6 +179,36 @@ class WorkspaceTests(TestCase):
         )
         self.assertFalse(form.is_valid())
         self.assertIn("target_url", form.errors)
+
+    def test_page_url_rejects_invalid_port(self):
+        with self.assertRaises(ValidationError):
+            normalize_page_url("https://example.org:not-a-port/", frozenset({"example.org"}))
+
+    def test_config_rejects_missing_preview_template(self):
+        config_path = self.config_dir / "test.toml"
+        config_path.write_text(
+            config_path.read_text(encoding="utf-8").replace(
+                'preview_url_template = "https://preview.example/{session_id}/"',
+                'preview_url_template = ""',
+            ),
+            encoding="utf-8",
+        )
+        load_site_config.cache_clear()
+        with self.assertRaisesRegex(ImproperlyConfigured, "preview_url_template"):
+            load_site_config("test")
+
+    def test_config_rejects_backup_inside_production_root(self):
+        config_path = self.config_dir / "test.toml"
+        config_path.write_text(
+            config_path.read_text(encoding="utf-8").replace(
+                f'backup_path = "{self.backup_dir}"',
+                f'backup_path = "{self.source / "backups"}"',
+            ),
+            encoding="utf-8",
+        )
+        load_site_config.cache_clear()
+        with self.assertRaisesRegex(ImproperlyConfigured, "backup_path"):
+            load_site_config("test")
 
     def test_publish_detects_production_conflict(self):
         item = self.new_session()
@@ -135,6 +250,8 @@ class WorkspaceTests(TestCase):
         response = self.client.get(item.get_absolute_url(), secure=True)
         self.assertEqual(response.status_code, 200)
         self.assertContains(response, "Nowy czat tej podstrony")
+        self.assertContains(response, 'src="/static/editor/workbench.js"')
+        self.assertContains(response, 'href="/static/editor/workbench.css"')
 
     def test_multiple_page_chats_share_one_workspace(self):
         item = self.new_session()
@@ -173,6 +290,33 @@ class WorkspaceTests(TestCase):
         self.assertTrue(response.json()["ok"])
         self.assertEqual(run.call_args.args[1], conversation)
         self.assertIn(conversation.target_url, run.call_args.kwargs["model_text"])
+
+    def test_openai_client_configuration_error_is_reported_as_chat_error(self):
+        item = self.new_session()
+        conversation = item.conversations.get()
+        with patch("openai.OpenAI", side_effect=RuntimeError("missing key")):
+            with self.assertRaisesRegex(AssistantError, "OpenAI"):
+                run_chat_turn(item, conversation, "Zmień tekst")
+
+    @override_settings(OPENAI_MAX_TOOL_ROUNDS=1)
+    def test_final_response_after_last_allowed_tool_call_is_returned(self):
+        item = self.new_session()
+        conversation = item.conversations.get()
+        tool_call = SimpleNamespace(
+            type="function_call",
+            name="list_files",
+            arguments='{"query": ""}',
+            call_id="call-1",
+        )
+        first = SimpleNamespace(id="response-1", output=[tool_call], output_text="")
+        final = SimpleNamespace(id="response-2", output=[], output_text="Gotowe.")
+        client = SimpleNamespace(responses=SimpleNamespace(create=Mock(side_effect=[first, final])))
+
+        with patch("openai.OpenAI", return_value=client):
+            message = run_chat_turn(item, conversation, "Pokaż pliki")
+
+        self.assertEqual(message.content, "Gotowe.")
+        self.assertEqual(client.responses.create.call_count, 2)
 
     def test_preview_auth_endpoint_requires_membership(self):
         item = self.new_session()

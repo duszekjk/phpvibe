@@ -57,17 +57,57 @@ def load_site_config(key: str) -> SiteConfig:
     except (OSError, tomllib.TOMLDecodeError) as exc:
         raise ImproperlyConfigured(f"Nie można wczytać konfiguracji {path}: {exc}") from exc
 
-    root = Path(raw["root_path"]).expanduser().resolve()
+    try:
+        root_value = raw["root_path"]
+    except KeyError as exc:
+        raise ImproperlyConfigured("Konfiguracja musi zawierać root_path.") from exc
+    root = Path(root_value).expanduser().resolve()
     if not root.is_dir():
         raise ImproperlyConfigured(f"Katalog strony nie istnieje: {root}")
-    hosts = frozenset(str(item).lower() for item in raw.get("allowed_hosts", []))
+    hosts = frozenset(str(item).strip().lower() for item in raw.get("allowed_hosts", []) if str(item).strip())
     if not hosts:
         raise ImproperlyConfigured("Konfiguracja musi zawierać allowed_hosts.")
-    extensions = frozenset(
-        item if str(item).startswith(".") else f".{item}"
-        for item in raw.get("allowed_extensions", [".php", ".css", ".js", ".html", ".txt", ".md"])
-    )
+    if any("://" in host or "/" in host or ":" in host for host in hosts):
+        raise ImproperlyConfigured("allowed_hosts może zawierać tylko nazwy hostów, bez schematu, portu i ścieżki.")
+
+    preview_template = str(raw.get("preview_url_template", "")).strip()
+    if preview_template.count("{session_id}") != 1:
+        raise ImproperlyConfigured("preview_url_template musi zawierać dokładnie jeden placeholder {session_id}.")
+    try:
+        preview_parts = urlsplit(preview_template.format(session_id="00000000-0000-0000-0000-000000000000"))
+        preview_parts.port
+    except (ValueError, KeyError) as exc:
+        raise ImproperlyConfigured("preview_url_template jest nieprawidłowy.") from exc
+    if (
+        preview_parts.scheme not in {"http", "https"}
+        or not preview_parts.hostname
+        or preview_parts.username
+        or preview_parts.password
+        or preview_parts.query
+        or preview_parts.fragment
+    ):
+        raise ImproperlyConfigured(
+            "preview_url_template musi być pełnym adresem HTTP(S), bez danych logowania, zapytania i fragmentu."
+        )
+
+    extensions = set()
+    for item in raw.get("allowed_extensions", [".php", ".css", ".js", ".html", ".txt", ".md"]):
+        extension = str(item).strip().lower()
+        if not extension or "/" in extension or extension in {".", ".."}:
+            raise ImproperlyConfigured(f"Nieprawidłowe rozszerzenie pliku: {item!r}")
+        extensions.add(extension if extension.startswith(".") else f".{extension}")
+
+    ignored_names = frozenset(str(item).strip() for item in raw.get("ignored_names", [".git", ".DS_Store", "vendor", "node_modules"]))
+    if any(not item or item in {".", ".."} or "/" in item for item in ignored_names):
+        raise ImproperlyConfigured("ignored_names może zawierać tylko pojedyncze nazwy plików lub katalogów.")
+
     backup = raw.get("backup_path")
+    backup_path = Path(backup).expanduser().resolve() if backup else None
+    publish_enabled = bool(raw.get("publish_enabled", False))
+    if publish_enabled and backup_path is None:
+        raise ImproperlyConfigured("Włączona publikacja wymaga backup_path.")
+    if backup_path is not None and (backup_path == root or root in backup_path.parents):
+        raise ImproperlyConfigured("backup_path musi znajdować się poza katalogiem strony produkcyjnej.")
     configured_protected = tuple(raw.get("protected_paths", [".env", ".env.*", "*secret*", "*credentials*"]))
     preview_replacements = tuple(
         PreviewReplacement(
@@ -82,12 +122,12 @@ def load_site_config(key: str) -> SiteConfig:
         key=key,
         root_path=root,
         allowed_hosts=hosts,
-        preview_url_template=raw.get("preview_url_template", ""),
+        preview_url_template=preview_template,
         description=raw.get("description", ""),
-        allowed_extensions=extensions,
-        ignored_names=frozenset(raw.get("ignored_names", [".git", ".DS_Store", "vendor", "node_modules"])),
+        allowed_extensions=frozenset(extensions),
+        ignored_names=ignored_names,
         protected_paths=configured_protected + ("__phpvibe_preview", "__phpvibe_preview/*", "__phpvibe_preview/**"),
         preview_replacements=preview_replacements,
-        publish_enabled=bool(raw.get("publish_enabled", False)),
-        backup_path=Path(backup).expanduser().resolve() if backup else None,
+        publish_enabled=publish_enabled,
+        backup_path=backup_path,
     )
