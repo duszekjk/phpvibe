@@ -383,8 +383,8 @@ required = true
         response = self.client.get(item.get_absolute_url(), secure=True)
         self.assertEqual(response.status_code, 200)
         self.assertContains(response, "Nowy czat tej podstrony")
-        self.assertRegex(response.content.decode(), r'src="/static/editor/workbench\.js\?v=[0-9a-f]{12}"')
-        self.assertRegex(response.content.decode(), r'href="/static/editor/workbench\.css\?v=[0-9a-f]{12}"')
+        self.assertRegex(response.content.decode(), r'src="/_assets/editor/workbench\.js\?v=[0-9a-f]{12}"')
+        self.assertRegex(response.content.decode(), r'href="/_assets/editor/workbench\.css\?v=[0-9a-f]{12}"')
         self.assertContains(response, "/__vibe_token/")
         self.assertContains(response, f'/rozmowy/{item.pk}/usun/')
 

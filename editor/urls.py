@@ -4,6 +4,7 @@ from . import views
 
 
 urlpatterns = [
+    path("_assets/editor/<str:name>", views.runtime_asset, name="runtime_asset"),
     path("", views.dashboard, name="dashboard"),
     path("rozmowy/nowa/", views.start_session, name="start_session"),
     path("rozmowy/<uuid:session_id>/", views.session_detail, name="session_detail"),

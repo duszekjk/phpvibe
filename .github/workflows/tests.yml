@@ -61,6 +61,7 @@ jobs:
           node --check editor/static/editor/preview-bridge.js
           node --check editor/static/editor/workbench.js
           node editor/tests/workbench_navigation_test.js
+          node editor/tests/copy_progress_test.js
 
       - name: Sprawdź konfigurację produkcyjną Django
         run: python manage.py check --deploy

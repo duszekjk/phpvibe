@@ -1,4 +1,5 @@
 import json
+import mimetypes
 import threading
 
 from django.contrib import messages
@@ -18,6 +19,7 @@ from .models import EditSession, PageConversation, SiteMembership
 from .navigation import get_or_create_page_conversation, repair_page_conversation
 from .permissions import session_for_user
 from .preview_access import add_preview_token, make_preview_token, verify_preview_token
+from .runtime_assets import asset_path, asset_version
 from .services.assistant import AssistantError, run_chat_turn
 from .services.workspaces import (
     WorkspaceError,
@@ -28,6 +30,23 @@ from .services.workspaces import (
     refresh_preview_assets,
     reset_workspace,
 )
+
+
+def runtime_asset(request, name):
+    """Return UI code from the currently running release, not stale collectstatic output."""
+    try:
+        path = asset_path(name)
+        version = asset_version(name)
+    except (KeyError, OSError):
+        raise Http404
+    content_type = mimetypes.guess_type(name)[0] or "application/octet-stream"
+    response = HttpResponse(path.read_bytes(), content_type=content_type)
+    response["X-Content-Type-Options"] = "nosniff"
+    if request.GET.get("v") == version:
+        response["Cache-Control"] = "public, max-age=31536000, immutable"
+    else:
+        response["Cache-Control"] = "no-store"
+    return response
 
 
 @login_required
