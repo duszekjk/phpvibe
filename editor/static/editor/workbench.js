@@ -12,6 +12,7 @@
   let editMode = false;
   let bridgeReady = false;
   let navigating = false;
+  let initialPreviewPageSeen = false;
   const navigationGuardKey = `phpvibe-preview-navigation:${window.location.pathname}`;
 
   const copyProgress = document.getElementById("copy-progress");
@@ -135,6 +136,10 @@
     }
     if (event.data.type === "page-changed") {
       loading?.classList.add("hidden");
+      if (!initialPreviewPageSeen) {
+        initialPreviewPageSeen = true;
+        return;
+      }
       const canonical = previewToCanonical(event.data.pageUrl);
       if (canonical) switchConversation(canonical);
     }

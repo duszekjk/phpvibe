@@ -35,11 +35,30 @@ global.document = {
 };
 global.fetch = async () => {
   fetchCalls += 1;
-  throw new Error("Equivalent preview URL must not trigger navigation");
+  return {
+    ok: true,
+    async json() {
+      return { ok: true, url: "/rozmowy/inna/", target_url: "https://example.test/kontakt" };
+    },
+  };
 };
 
 const source = fs.readFileSync("editor/static/editor/workbench.js", "utf8");
 vm.runInThisContext(source, { filename: "workbench.js" });
+
+listeners.message({
+  source: previewWindow,
+  origin: "https://tmp.example.test",
+  data: {
+    source: "phpvibe-preview",
+    type: "page-changed",
+    pageUrl: "https://tmp.example.test/vibe/9abeb6c9-4529-4a16-a408-529101b3bd40/"
+      + "__vibe_token/signed-token/unexpected-initial-path"
+      + "?__vibe_token=signed-token",
+  },
+});
+
+assert.equal(fetchCalls, 0, "Initial preview synchronization caused a reload");
 
 listeners.message({
   source: previewWindow,
@@ -54,4 +73,17 @@ listeners.message({
 });
 
 assert.equal(fetchCalls, 0, "Equivalent URLs with reordered parameters caused a reload loop");
+
+listeners.message({
+  source: previewWindow,
+  origin: "https://tmp.example.test",
+  data: {
+    source: "phpvibe-preview",
+    type: "page-changed",
+    pageUrl: "https://tmp.example.test/vibe/9abeb6c9-4529-4a16-a408-529101b3bd40/"
+      + "__vibe_token/signed-token/kontakt?__vibe_token=signed-token",
+  },
+});
+
+assert.equal(fetchCalls, 1, "A real navigation after initial synchronization was ignored");
 console.log("workbench navigation regression test: OK");
