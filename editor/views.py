@@ -9,6 +9,7 @@ from django.core.exceptions import PermissionDenied
 from django.http import Http404, HttpResponse, JsonResponse
 from django.shortcuts import get_object_or_404, redirect, render
 from django.urls import reverse
+from django.views.decorators.cache import never_cache
 from django.views.decorators.http import require_POST
 
 from .config import load_site_config
@@ -30,6 +31,7 @@ from .services.workspaces import (
 
 
 @login_required
+@never_cache
 def dashboard(request):
     sessions = list(
         EditSession.objects.filter(site__memberships__user=request.user).select_related("site").distinct()[:30]
@@ -40,6 +42,7 @@ def dashboard(request):
 
 
 @login_required
+@never_cache
 def start_session(request):
     if request.method == "POST":
         form = StartSessionForm(request.POST, user=request.user)
@@ -86,6 +89,7 @@ def _return_to_page(edit_session, request):
 
 
 @login_required
+@never_cache
 def session_detail(request, session_id, conversation_id=None):
     edit_session = session_for_user(request.user, session_id)
     conversation = _page_for_session(edit_session, conversation_id)
@@ -145,6 +149,7 @@ def session_detail(request, session_id, conversation_id=None):
 
 
 @login_required
+@never_cache
 def session_progress(request, session_id):
     item = session_for_user(request.user, session_id)
     return JsonResponse({

@@ -1,5 +1,6 @@
 from pathlib import Path
 import stat
+import subprocess
 import tempfile
 from types import SimpleNamespace
 from unittest.mock import Mock, patch
@@ -183,6 +184,19 @@ class WorkspaceTests(TestCase):
         self.assertEqual(revision.changed_files, ["index.php"])
         self.assertEqual(bridge.read_text(encoding="utf-8"), "runtime update")
 
+    def test_binary_assets_are_copied_but_not_added_to_git_history(self):
+        (self.source / "photo.jpg").write_bytes(b"binary-image" * 100)
+
+        item = self.new_session()
+        root = Path(item.workspace_path)
+        tracked = subprocess.run(
+            ["git", "ls-files"], cwd=root, check=True, capture_output=True, text=True
+        ).stdout.splitlines()
+
+        self.assertTrue((root / "photo.jpg").is_file())
+        self.assertNotIn("photo.jpg", tracked)
+        self.assertIn("index.php", tracked)
+
     def test_reset_restores_files_ignored_by_the_legacy_site(self):
         (self.source / ".gitignore").write_text("generated.txt\ncache.txt\n", encoding="utf-8")
         (self.source / "generated.txt").write_text("stan początkowy", encoding="utf-8")
@@ -300,6 +314,16 @@ required = true
             "files_done": 3,
             "error": "",
         })
+        self.assertIn("no-store", response.headers["Cache-Control"])
+
+    def test_session_page_is_never_cached(self):
+        item = self.new_session()
+        self.client.force_login(self.user)
+
+        response = self.client.get(item.get_absolute_url(), secure=True)
+
+        self.assertEqual(response.status_code, 200)
+        self.assertIn("no-store", response.headers["Cache-Control"])
 
     def test_failed_session_does_not_render_a_preview_iframe(self):
         item = EditSession.objects.create(

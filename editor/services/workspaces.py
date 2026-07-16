@@ -1,6 +1,8 @@
 from __future__ import annotations
 
 from contextlib import contextmanager
+import ctypes
+import errno
 import fcntl
 import hashlib
 import json
@@ -13,6 +15,7 @@ import tempfile
 import time
 from typing import Iterable
 from urllib.parse import urlsplit
+import sys
 
 from django.conf import settings
 from django.core.exceptions import PermissionDenied
@@ -31,6 +34,17 @@ class WorkspaceBusyError(WorkspaceError):
 
 
 PREVIEW_ASSET_DIR = "__phpvibe_preview"
+
+
+if sys.platform == "darwin":
+    try:
+        _clonefile = ctypes.CDLL(None, use_errno=True).clonefile
+        _clonefile.argtypes = (ctypes.c_char_p, ctypes.c_char_p, ctypes.c_int)
+        _clonefile.restype = ctypes.c_int
+    except (AttributeError, OSError):
+        _clonefile = None
+else:
+    _clonefile = None
 
 
 def _run_git(root: Path, *args: str) -> str:
@@ -78,6 +92,18 @@ def _copy_plan(source: Path, ignore_callback) -> tuple[int, int]:
                 total_bytes += path.stat().st_size
                 total_files += 1
     return total_bytes, total_files
+
+
+def _copy_file_fast(source: str, target: str) -> str:
+    """Use an APFS copy-on-write clone when possible, with a portable fallback."""
+    if _clonefile is not None:
+        result = _clonefile(os.fsencode(source), os.fsencode(target), 0)
+        if result == 0:
+            return target
+        error = ctypes.get_errno()
+        if error not in {errno.EXDEV, errno.ENOTSUP, errno.EINVAL, errno.EPERM}:
+            raise OSError(error, os.strerror(error), source)
+    return str(shutil.copy2(source, target))
 
 
 def install_preview_layer(destination: Path, config: SiteConfig) -> list[dict[str, str]]:
@@ -203,7 +229,7 @@ def create_workspace(edit_session: EditSession) -> None:
         progress = {"bytes": 0, "files": 0, "updated": 0.0}
 
         def copy_with_progress(source, target):
-            result = shutil.copy2(source, target)
+            result = _copy_file_fast(source, target)
             progress["bytes"] += Path(source).stat().st_size
             progress["files"] += 1
             now = time.monotonic()
@@ -220,7 +246,10 @@ def create_workspace(edit_session: EditSession) -> None:
         EditSession.objects.filter(pk=edit_session.pk).update(copy_stage="Zapisywanie stanu początkowego…")
         _run_git(destination, "init", "--quiet")
         # The legacy site's .gitignore must not weaken PHP Vibe's own history.
-        _run_git(destination, "add", "--all", "--force")
+        initial_paths = sorted(path.relative_to(destination).as_posix() for path in editable_files(destination, config))
+        if not initial_paths:
+            raise WorkspaceError("Kopia nie zawiera plików dozwolonych do edycji.")
+        _run_git(destination, "add", "--all", "--force", "--", *initial_paths)
         _run_git(destination, "commit", "--quiet", "-m", "Stan początkowy rozmowy")
         baseline = _run_git(destination, "rev-parse", "HEAD")
         manifest = build_manifest(config.root_path, config)
@@ -330,15 +359,20 @@ def atomic_write(path: Path, content: str) -> None:
 
 def commit_change(edit_session: EditSession, summary: str) -> Revision | None:
     root = workspace_root(edit_session)
-    preview_exclusion = f":(exclude){PREVIEW_ASSET_DIR}/**"
+    config = load_site_config(edit_session.site.config_key)
+    tracked_paths = set(_run_git(root, "ls-files").splitlines())
+    editable_paths = {path.relative_to(root).as_posix() for path in editable_files(root, config)}
+    git_paths = sorted(tracked_paths | editable_paths)
+    if not git_paths:
+        return None
     changed = [
         line for line in _run_git(
-            root, "status", "--short", "--untracked-files=all", "--", ".", preview_exclusion
+            root, "status", "--short", "--untracked-files=all", "--", *git_paths
         ).splitlines() if line
     ]
     if not changed:
         return None
-    _run_git(root, "add", "--all", "--force", "--", ".", preview_exclusion)
+    _run_git(root, "add", "--all", "--force", "--", *git_paths)
     _run_git(root, "commit", "--quiet", "-m", summary[:240])
     commit_hash = _run_git(root, "rev-parse", "HEAD")
     files = [line[3:] for line in changed]
@@ -361,8 +395,13 @@ def _reset_workspace_locked(locked: EditSession) -> None:
     if locked.status not in {EditSession.Status.ACTIVE, EditSession.Status.PUBLISHED}:
         raise WorkspaceError("Tej rozmowy nie można teraz przywrócić.")
     root = workspace_root(locked)
+    config = load_site_config(locked.site.config_key)
+    tracked_paths = set(_run_git(root, "ls-files").splitlines())
+    for path in editable_files(root, config):
+        if path.relative_to(root).as_posix() not in tracked_paths:
+            path.unlink()
     _run_git(root, "reset", "--hard", locked.baseline_commit)
-    _run_git(root, "clean", "-fdx")
+    refresh_preview_assets(locked)
     Revision.objects.create(
         session=locked,
         commit_hash=locked.baseline_commit,
