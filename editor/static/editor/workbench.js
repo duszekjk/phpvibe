@@ -12,6 +12,7 @@
   let editMode = false;
   let bridgeReady = false;
   let navigating = false;
+  const navigationGuardKey = `phpvibe-preview-navigation:${window.location.pathname}`;
 
   const copyProgress = document.getElementById("copy-progress");
   if (copyProgress && root.dataset.progressUrl) {
@@ -71,8 +72,42 @@
     return `${target.protocol}//${target.host}${suffix}${page.search}`;
   }
 
+  function comparablePageUrl(rawUrl) {
+    try {
+      const url = new URL(rawUrl);
+      url.hash = "";
+      url.searchParams.delete("__vibe_token");
+      const parameters = [...url.searchParams.entries()].sort(([leftKey, leftValue], [rightKey, rightValue]) =>
+        leftKey.localeCompare(rightKey) || leftValue.localeCompare(rightValue));
+      url.search = "";
+      for (const [key, value] of parameters) url.searchParams.append(key, value);
+      url.hostname = url.hostname.toLowerCase();
+      if (url.pathname.length > 1) url.pathname = url.pathname.replace(/\/+$/, "");
+      return url.href;
+    } catch (_error) {
+      return null;
+    }
+  }
+
+  function wasJustNavigated(targetKey) {
+    try {
+      const previous = JSON.parse(window.sessionStorage.getItem(navigationGuardKey) || "null");
+      return previous?.target === targetKey && Date.now() - Number(previous.at) < 10000;
+    } catch (_error) {
+      return false;
+    }
+  }
+
+  function rememberNavigation(targetKey) {
+    try {
+      window.sessionStorage.setItem(navigationGuardKey, JSON.stringify({ target: targetKey, at: Date.now() }));
+    } catch (_error) { /* Nawigacja nadal zadziała bez sessionStorage. */ }
+  }
+
   async function switchConversation(targetUrl) {
-    if (navigating || targetUrl === root.dataset.targetUrl) return;
+    const targetKey = comparablePageUrl(targetUrl);
+    const currentKey = comparablePageUrl(root.dataset.targetUrl);
+    if (navigating || !targetKey || targetKey === currentKey || wasJustNavigated(targetKey)) return;
     navigating = true;
     const body = new FormData();
     body.append("url", targetUrl);
@@ -81,6 +116,7 @@
       const response = await fetch(root.dataset.navigateUrl, { method: "POST", body, headers: { Accept: "application/json" } });
       const data = await response.json();
       if (!response.ok || !data.ok) throw new Error(data.error || "Nie udało się otworzyć podstrony.");
+      rememberNavigation(comparablePageUrl(data.target_url) || targetKey);
       window.location.href = data.url;
     } catch (error) {
       navigating = false;
