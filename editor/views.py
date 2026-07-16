@@ -76,6 +76,7 @@ def session_detail(request, session_id, conversation_id=None):
         preview_url = add_preview_token(
             config.preview_url(edit_session.pk, conversation.target_url),
             make_preview_token(edit_session, request.user),
+            edit_session.pk,
         )
         publish_configured = config.publish_enabled
         allowed_hosts = ",".join(sorted(config.allowed_hosts))

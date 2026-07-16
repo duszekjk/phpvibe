@@ -79,13 +79,13 @@ W kopii Jerozolimy są skrypty używające `file_put_contents`, dlatego rozdziel
 
 `preview_url_template` wskazuje trasę Apache mapującą UUID wyłącznie na `VIBE_WORKSPACE_ROOT/<uuid>/site`. Zewnętrzna konfiguracja Apache sprawdza format UUID i przekazuje parę UUID/token do trwałego helpera `RewriteMap`. Helper pyta lokalny endpoint Django, a Apache udostępnia plik dopiero po odpowiedzi `204`. Nie wolno budować ścieżki z dowolnego fragmentu URL.
 
-Podgląd działa na osobnym originie `https://tmp.jerozolima.org`, bez ciasteczka sesji Django. Panel dodaje do adresu krótko ważny, podpisany parametr `__vibe_token`, ograniczony do użytkownika i konkretnej kopii. Helper Apache przekazuje go do:
+Podgląd działa na osobnym originie `https://tmp.jerozolima.org`, bez ciasteczka sesji Django. Panel umieszcza krótko ważny, podpisany `__vibe_token`, ograniczony do użytkownika i konkretnej kopii, w prefiksie każdej ścieżki podglądu. Dzięki temu obrazy, CSS i JS są autoryzowane bez zewnętrznego cookie blokowanego przez Safari w iframe. Helper Apache przekazuje token do:
 
 ```text
 /wewnetrzne/podglad/<session_id>/autoryzuj/?token=<__vibe_token>
 ```
 
-Przy pierwszym poprawnym żądaniu Apache zapisuje token jako cookie `Secure; HttpOnly; SameSite=Lax`, ograniczone ścieżką do `/vibe/<session_id>/`. Kolejne żądania obrazów, CSS, JS i PHP są sprawdzane z tym cookie. Nie wolno współdzielić z `tmp.jerozolima.org` ciasteczka sesji panelu Django.
+Każde żądanie pod `/vibe/<session_id>/__vibe_token/<token>/...` jest sprawdzane niezależnie. Nie wolno współdzielić z `tmp.jerozolima.org` ciasteczka sesji panelu Django ani dopuszczać niepodpisanej wersji tej ścieżki.
 
 Podczas tworzenia kopii aplikacja dodaje chroniony katalog `__phpvibe_preview/` z JS i CSS edytora. Dla Jerozolimy druga transformacja `preview_replacements` zamienia generowane przez PHP `<head>` na:
 

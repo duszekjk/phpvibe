@@ -40,7 +40,14 @@
     if (page.origin !== base.origin) return null;
     const prefix = base.pathname.replace(/\/+$/, "");
     if (page.pathname !== prefix && !page.pathname.startsWith(`${prefix}/`)) return null;
-    const suffix = page.pathname.slice(prefix.length) || "/";
+    const remainder = page.pathname.slice(prefix.length);
+    const signedMarker = "/__vibe_token/";
+    let suffix = remainder || "/";
+    if (remainder.startsWith(signedMarker)) {
+      const afterTokenMarker = remainder.slice(signedMarker.length);
+      const pathStart = afterTokenMarker.indexOf("/");
+      suffix = pathStart >= 0 ? afterTokenMarker.slice(pathStart) : "/";
+    }
     const target = new URL(root.dataset.targetUrl);
     page.searchParams.delete("__vibe_token");
     return `${target.protocol}//${target.host}${suffix}${page.search}`;

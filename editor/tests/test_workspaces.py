@@ -12,7 +12,7 @@ from editor.config import load_site_config
 from editor.forms import StartSessionForm
 from editor.models import EditSession, Site, SiteMembership
 from editor.navigation import get_or_create_page_conversation, normalize_page_url
-from editor.preview_access import make_preview_token
+from editor.preview_access import add_preview_token, make_preview_token
 from editor.services.assistant import AssistantError, _replay_input, run_chat_turn
 from editor.services.file_tools import read_file, replace_text, write_file
 from editor.services.workspaces import (
@@ -252,6 +252,7 @@ class WorkspaceTests(TestCase):
         self.assertContains(response, "Nowy czat tej podstrony")
         self.assertContains(response, 'src="/static/editor/workbench.js"')
         self.assertContains(response, 'href="/static/editor/workbench.css"')
+        self.assertContains(response, "/__vibe_token/")
 
     def test_multiple_page_chats_share_one_workspace(self):
         item = self.new_session()
@@ -326,3 +327,14 @@ class WorkspaceTests(TestCase):
         self.assertEqual(self.client.get(url, {"token": token}, secure=True).status_code, 204)
         self.client.force_login(self.user)
         self.assertEqual(self.client.get(url, secure=True).status_code, 204)
+
+    def test_preview_token_is_carried_by_the_path_for_every_resource(self):
+        session_id = "9abeb6c9-4529-4a16-a408-529101b3bd40"
+        token = "signed:token.with-safe_parts"
+        url = add_preview_token(
+            f"https://preview.example/vibe/{session_id}/pliki/index.php?strona=start",
+            token,
+            session_id,
+        )
+        self.assertIn(f"/vibe/{session_id}/__vibe_token/signed%3Atoken.with-safe_parts/pliki/index.php", url)
+        self.assertIn("__vibe_token=signed%3Atoken.with-safe_parts", url)

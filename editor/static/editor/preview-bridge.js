@@ -50,6 +50,13 @@
     return parts.join(" > ");
   }
 
+  function preserveSignedPreviewPath(targetUrl) {
+    const current = new URL(window.location.href);
+    const match = current.pathname.match(/^(.*\/__vibe_token\/[^/]+)(?:\/|$)/);
+    if (!match || targetUrl.origin !== current.origin || targetUrl.pathname.startsWith(match[1])) return;
+    targetUrl.pathname = `${match[1]}${targetUrl.pathname.startsWith("/") ? "" : "/"}${targetUrl.pathname}`;
+  }
+
   document.addEventListener("mouseover", event => {
     if (!editMode) return;
     const element = usefulElement(event.target);
@@ -67,6 +74,7 @@
       try {
         const targetUrl = new URL(anchor.href, window.location.href);
         if (targetUrl.origin === window.location.origin) {
+          preserveSignedPreviewPath(targetUrl);
           targetUrl.searchParams.set("__vibe_token", token);
           anchor.href = targetUrl.href;
         } else if (["http:", "https:"].includes(targetUrl.protocol)) {
@@ -101,6 +109,7 @@
     try {
       const action = new URL(form.action || window.location.href, window.location.href);
       if (action.origin !== window.location.origin) return;
+      preserveSignedPreviewPath(action);
       if ((form.method || "get").toLowerCase() === "get") {
         let input = form.querySelector('input[name="__vibe_token"]');
         if (!input) {
@@ -110,6 +119,7 @@
           form.appendChild(input);
         }
         input.value = token;
+        form.action = action.href;
       } else {
         action.searchParams.set("__vibe_token", token);
         form.action = action.href;
