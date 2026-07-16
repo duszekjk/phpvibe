@@ -523,7 +523,8 @@ required = true
 
         self.assertEqual(response.status_code, 200)
         self.assertContains(response, reverse("delete_session", kwargs={"session_id": item.pk}))
-        self.assertContains(response, "Usuń")
+        self.assertContains(response, "Opcje rozmowy")
+        self.assertContains(response, "Usuń rozmowę")
 
     def test_other_site_member_does_not_see_dashboard_delete_action(self):
         item = self.new_session()

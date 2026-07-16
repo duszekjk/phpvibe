@@ -14,10 +14,17 @@
             <div class="session-meta"><span class="status {{ item.status }}">{{ item.get_status_display }}</span><time>{{ item.updated_at|date:"d.m.Y H:i" }}</time></div>
           </a>
           {% if item.can_delete_from_dashboard %}
-            <form method="post" action="{% url 'delete_session' item.pk %}" class="session-delete-form" onsubmit="return confirm('Trwale usunąć tę rozmowę i całą jej kopię roboczą?');">
-              {% csrf_token %}<input type="hidden" name="confirmation" value="DELETE">
-              <button type="submit" class="session-delete-button" aria-label="Usuń rozmowę {{ item.title }}">Usuń</button>
-            </form>
+            <details class="session-actions">
+              <summary aria-label="Opcje rozmowy {{ item.title }}" title="Opcje rozmowy">•••</summary>
+              <div class="session-actions-popover">
+                <strong>{{ item.title }}</strong>
+                <span>Usunięta zostanie rozmowa, historia oraz cała kopia robocza.</span>
+                <form method="post" action="{% url 'delete_session' item.pk %}" onsubmit="return confirm('Trwale usunąć tę rozmowę i całą jej kopię roboczą?');">
+                  {% csrf_token %}<input type="hidden" name="confirmation" value="DELETE">
+                  <button type="submit" class="button danger full">Usuń rozmowę</button>
+                </form>
+              </div>
+            </details>
           {% endif %}
         </div>
       {% endfor %}
