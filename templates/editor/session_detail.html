@@ -23,6 +23,7 @@
   data-navigate-url="{% url 'navigate_page' edit_session.pk %}"
   data-inline-edit-url="{% url 'inline_edit' edit_session.pk conversation.pk %}"
   data-allowed-hosts="{{ allowed_hosts }}"
+  data-progress-url="{{ progress_url }}"
 >
   <section class="preview-stage card">
     <div class="browser-toolbar">
@@ -48,7 +49,15 @@
         <iframe id="site-preview" src="{{ preview_url }}" title="Podgląd edytowanej strony" referrerpolicy="no-referrer"></iframe>
         <div class="preview-loading" id="preview-loading"><span></span>Ładowanie podglądu…</div>
       {% else %}
-        <div class="preview-unavailable"><strong>Podgląd nie jest skonfigurowany</strong><p>Ustaw `preview_url_template` dla tej strony.</p></div>
+        <div class="preview-unavailable">
+          {% if edit_session.status == "failed" %}
+            <strong>Kopia robocza nie powstała</strong><p>{{ edit_session.error_message|default:"Tworzenie kopii zakończyło się błędem." }}</p>
+          {% elif edit_session.status == "preparing" %}
+            <div class="copy-progress" id="copy-progress"><strong id="copy-progress-stage">Przygotowywanie kopii roboczej…</strong><progress id="copy-progress-bar" max="100" value="0"></progress><p id="copy-progress-size">Obliczanie rozmiaru strony…</p></div>
+          {% else %}
+            <strong>Podgląd nie jest skonfigurowany</strong><p>Ustaw `preview_url_template` dla tej strony.</p>
+          {% endif %}
+        </div>
       {% endif %}
     </div>
 

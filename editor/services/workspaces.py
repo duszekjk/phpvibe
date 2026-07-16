@@ -10,6 +10,7 @@ import shutil
 import stat
 import subprocess
 import tempfile
+import time
 from typing import Iterable
 from urllib.parse import urlsplit
 
@@ -64,6 +65,19 @@ def _ignore(config: SiteConfig):
         return ignored
 
     return callback
+
+
+def _copy_plan(source: Path, ignore_callback) -> tuple[int, int]:
+    total_bytes = total_files = 0
+    for directory, directories, files in os.walk(source, followlinks=False):
+        ignored = ignore_callback(directory, directories + files)
+        directories[:] = [name for name in directories if name not in ignored]
+        for name in files:
+            path = Path(directory) / name
+            if name not in ignored and path.is_file() and not path.is_symlink():
+                total_bytes += path.stat().st_size
+                total_files += 1
+    return total_bytes, total_files
 
 
 def install_preview_layer(destination: Path, config: SiteConfig) -> list[dict[str, str]]:
@@ -168,8 +182,30 @@ def create_workspace(edit_session: EditSession) -> None:
 
     destination.parent.mkdir(parents=True, exist_ok=True)
     try:
-        shutil.copytree(config.root_path, destination, ignore=_ignore(config), copy_function=shutil.copy2)
+        ignore_callback = _ignore(config)
+        EditSession.objects.filter(pk=edit_session.pk).update(copy_stage="Obliczanie rozmiaru strony…")
+        total_bytes, total_files = _copy_plan(config.root_path, ignore_callback)
+        EditSession.objects.filter(pk=edit_session.pk).update(
+            copy_stage="Kopiowanie plików…", copy_bytes_total=total_bytes, copy_files_total=total_files
+        )
+        progress = {"bytes": 0, "files": 0, "updated": 0.0}
+
+        def copy_with_progress(source, target):
+            result = shutil.copy2(source, target)
+            progress["bytes"] += Path(source).stat().st_size
+            progress["files"] += 1
+            now = time.monotonic()
+            if now - progress["updated"] >= 0.25 or progress["files"] == total_files:
+                EditSession.objects.filter(pk=edit_session.pk).update(
+                    copy_bytes_done=progress["bytes"], copy_files_done=progress["files"]
+                )
+                progress["updated"] = now
+            return result
+
+        shutil.copytree(config.root_path, destination, ignore=ignore_callback, copy_function=copy_with_progress)
+        EditSession.objects.filter(pk=edit_session.pk).update(copy_stage="Przygotowywanie podglądu…")
         preview_transforms = install_preview_layer(destination, config)
+        EditSession.objects.filter(pk=edit_session.pk).update(copy_stage="Zapisywanie stanu początkowego…")
         _run_git(destination, "init", "--quiet")
         # The legacy site's .gitignore must not weaken PHP Vibe's own history.
         _run_git(destination, "add", "--all", "--force")
@@ -189,6 +225,9 @@ def create_workspace(edit_session: EditSession) -> None:
     edit_session.save(update_fields=[
         "workspace_path", "baseline_commit", "baseline_manifest", "preview_transforms", "status", "error_message", "updated_at"
     ])
+    EditSession.objects.filter(pk=edit_session.pk).update(
+        copy_stage="Gotowe", copy_bytes_done=total_bytes, copy_files_done=total_files
+    )
 
 
 def workspace_root(edit_session: EditSession) -> Path:

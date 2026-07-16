@@ -109,15 +109,20 @@ def load_site_config(key: str) -> SiteConfig:
     if backup_path is not None and (backup_path == root or root in backup_path.parents):
         raise ImproperlyConfigured("backup_path musi znajdować się poza katalogiem strony produkcyjnej.")
     configured_protected = tuple(raw.get("protected_paths", [".env", ".env.*", "*secret*", "*credentials*"]))
-    preview_replacements = tuple(
-        PreviewReplacement(
+    preview_replacements_list = []
+    seen_replacements = set()
+    for item in raw.get("preview_replacements", []):
+        replacement = PreviewReplacement(
             path=str(item["path"]),
             production_text=str(item["production_text"]),
             preview_text=str(item["preview_text"]),
             required=bool(item.get("required", True)),
         )
-        for item in raw.get("preview_replacements", [])
-    )
+        if replacement in seen_replacements:
+            continue
+        seen_replacements.add(replacement)
+        preview_replacements_list.append(replacement)
+    preview_replacements = tuple(preview_replacements_list)
     return SiteConfig(
         key=key,
         root_path=root,

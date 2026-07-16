@@ -7,6 +7,7 @@ from unittest.mock import Mock, patch
 from django.contrib.auth import get_user_model
 from django.core.exceptions import ImproperlyConfigured, PermissionDenied, ValidationError
 from django.test import TestCase, override_settings
+from django.urls import reverse
 
 from editor.config import load_site_config
 from editor.forms import StartSessionForm
@@ -209,6 +210,79 @@ class WorkspaceTests(TestCase):
         load_site_config.cache_clear()
         with self.assertRaisesRegex(ImproperlyConfigured, "backup_path"):
             load_site_config("test")
+
+    def test_config_deduplicates_identical_preview_replacements(self):
+        config_path = self.config_dir / "test.toml"
+        content = config_path.read_text(encoding="utf-8")
+        duplicate = '''\n[[preview_replacements]]
+path = "index.php"
+production_text = "<?php "
+preview_text = "<?php /* __PHPVIBE_PREVIEW_TEST__ */ "
+required = true
+'''
+        config_path.write_text(content + duplicate, encoding="utf-8")
+        load_site_config.cache_clear()
+
+        config = load_site_config("test")
+
+        self.assertEqual(len(config.preview_replacements), 1)
+
+    def test_workspace_records_completed_copy_progress(self):
+        expected_files = 2
+        expected_bytes = sum(path.stat().st_size for path in (self.source / "index.php", self.source / "main.css"))
+
+        item = self.new_session()
+
+        self.assertEqual(item.copy_stage, "Gotowe")
+        self.assertEqual(item.copy_files_total, expected_files)
+        self.assertEqual(item.copy_files_done, expected_files)
+        self.assertEqual(item.copy_bytes_total, expected_bytes)
+        self.assertEqual(item.copy_bytes_done, expected_bytes)
+
+    def test_progress_endpoint_reports_copy_size_and_stage(self):
+        item = EditSession.objects.create(
+            site=self.site,
+            owner=self.user,
+            title="Kopiowanie",
+            target_url="https://example.org/",
+            copy_stage="Kopiowanie plików…",
+            copy_bytes_total=4096,
+            copy_bytes_done=1024,
+            copy_files_total=8,
+            copy_files_done=3,
+        )
+        self.client.force_login(self.user)
+
+        response = self.client.get(reverse("session_progress", kwargs={"session_id": item.pk}), secure=True)
+
+        self.assertEqual(response.status_code, 200)
+        self.assertEqual(response.json(), {
+            "status": "preparing",
+            "stage": "Kopiowanie plików…",
+            "bytes_total": 4096,
+            "bytes_done": 1024,
+            "files_total": 8,
+            "files_done": 3,
+            "error": "",
+        })
+
+    def test_failed_session_does_not_render_a_preview_iframe(self):
+        item = EditSession.objects.create(
+            site=self.site,
+            owner=self.user,
+            title="Nieudana kopia",
+            target_url="https://example.org/",
+            status=EditSession.Status.FAILED,
+            error_message="Nie znaleziono transformacji podglądu.",
+        )
+        self.client.force_login(self.user)
+
+        response = self.client.get(item.get_absolute_url(), secure=True)
+
+        self.assertEqual(response.status_code, 200)
+        self.assertNotContains(response, 'id="site-preview"')
+        self.assertContains(response, "Kopia robocza nie powstała")
+        self.assertContains(response, "Nie znaleziono transformacji podglądu.")
 
     def test_publish_detects_production_conflict(self):
         item = self.new_session()

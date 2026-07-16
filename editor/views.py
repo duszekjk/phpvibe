@@ -1,11 +1,14 @@
 import json
+import threading
 
 from django.contrib import messages
 from django.contrib.auth.decorators import login_required
+from django.db import close_old_connections
 from django.core.exceptions import ImproperlyConfigured
 from django.core.exceptions import PermissionDenied
 from django.http import Http404, HttpResponse, JsonResponse
 from django.shortcuts import get_object_or_404, redirect, render
+from django.urls import reverse
 from django.views.decorators.http import require_POST
 
 from .config import load_site_config
@@ -39,20 +42,25 @@ def start_session(request):
             edit_session = form.save(commit=False)
             edit_session.owner = request.user
             edit_session.save()
-            try:
-                create_workspace(edit_session)
-            except Exception as exc:
-                edit_session.status = EditSession.Status.FAILED
-                edit_session.error_message = str(exc)
-                edit_session.save(update_fields=["status", "error_message", "updated_at"])
-                messages.error(request, f"Nie udało się przygotować kopii strony: {exc}")
-            else:
-                get_or_create_page_conversation(edit_session, edit_session.target_url)
-                messages.success(request, "Utworzono bezpieczną kopię roboczą strony.")
+            get_or_create_page_conversation(edit_session, edit_session.target_url)
+            threading.Thread(target=_prepare_workspace, args=(edit_session.pk,), daemon=True).start()
+            messages.info(request, "Rozpoczęto przygotowywanie kopii roboczej.")
             return redirect(edit_session)
     else:
         form = StartSessionForm(user=request.user)
     return render(request, "editor/start_session.html", {"form": form})
+
+
+def _prepare_workspace(session_id):
+    close_old_connections()
+    try:
+        create_workspace(EditSession.objects.get(pk=session_id, status=EditSession.Status.PREPARING))
+    except Exception as exc:
+        EditSession.objects.filter(pk=session_id).update(
+            status=EditSession.Status.FAILED, error_message=str(exc), copy_stage="Błąd kopiowania"
+        )
+    finally:
+        close_old_connections()
 
 
 def _page_for_session(edit_session, conversation_id=None):
@@ -78,13 +86,22 @@ def session_detail(request, session_id, conversation_id=None):
     membership = SiteMembership.objects.filter(site=edit_session.site, user=request.user).first()
     can_publish = request.user.is_superuser or (membership and membership.role == SiteMembership.Role.PUBLISHER)
     can_delete = request.user.is_superuser or edit_session.owner_id == request.user.pk
+    preview_available = (
+        edit_session.status in {EditSession.Status.ACTIVE, EditSession.Status.PUBLISHED}
+        and bool(edit_session.workspace_path)
+        and bool(edit_session.baseline_commit)
+    )
     try:
         config = load_site_config(edit_session.site.config_key)
         preview_base_url = config.preview_url(edit_session.pk)
-        preview_url = add_preview_token(
-            config.preview_url(edit_session.pk, conversation.target_url),
-            make_preview_token(edit_session, request.user),
-            edit_session.pk,
+        preview_url = (
+            add_preview_token(
+                config.preview_url(edit_session.pk, conversation.target_url),
+                make_preview_token(edit_session, request.user),
+                edit_session.pk,
+            )
+            if preview_available
+            else ""
         )
         publish_configured = config.publish_enabled
         allowed_hosts = ",".join(sorted(config.allowed_hosts))
@@ -105,12 +122,25 @@ def session_detail(request, session_id, conversation_id=None):
         "page_conversations": edit_session.conversations.all(),
         "address_form": PageAddressForm(edit_session=edit_session, initial={"url": conversation.target_url}),
         "preview_url": preview_url,
+        "preview_available": preview_available,
         "preview_base_url": preview_base_url,
         "allowed_hosts": allowed_hosts,
         "can_publish": can_publish,
         "can_delete": can_delete,
         "publish_configured": publish_configured,
         "diff": diff,
+        "progress_url": reverse("session_progress", kwargs={"session_id": edit_session.pk}),
+    })
+
+
+@login_required
+def session_progress(request, session_id):
+    item = session_for_user(request.user, session_id)
+    return JsonResponse({
+        "status": item.status, "stage": item.copy_stage,
+        "bytes_total": item.copy_bytes_total, "bytes_done": item.copy_bytes_done,
+        "files_total": item.copy_files_total, "files_done": item.copy_files_done,
+        "error": item.error_message if item.status == EditSession.Status.FAILED else "",
     })
 
 

@@ -7,6 +7,7 @@ urlpatterns = [
     path("", views.dashboard, name="dashboard"),
     path("rozmowy/nowa/", views.start_session, name="start_session"),
     path("rozmowy/<uuid:session_id>/", views.session_detail, name="session_detail"),
+    path("rozmowy/<uuid:session_id>/postep/", views.session_progress, name="session_progress"),
     path("rozmowy/<uuid:session_id>/strony/<uuid:conversation_id>/", views.session_detail, name="page_conversation"),
     path("rozmowy/<uuid:session_id>/strony/otworz/", views.navigate_page, name="navigate_page"),
     path("rozmowy/<uuid:session_id>/strony/<uuid:conversation_id>/wiadomosc/", views.send_message, name="send_message"),

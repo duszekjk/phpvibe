@@ -13,6 +13,24 @@
   let bridgeReady = false;
   let navigating = false;
 
+  const copyProgress = document.getElementById("copy-progress");
+  if (copyProgress && root.dataset.progressUrl) {
+    const pollProgress = async () => {
+      try {
+        const response = await fetch(root.dataset.progressUrl, { headers: { Accept: "application/json" } });
+        const data = await response.json();
+        const total = Number(data.bytes_total || 0);
+        const done = Number(data.bytes_done || 0);
+        document.getElementById("copy-progress-stage").textContent = data.stage || "Przygotowywanie kopii roboczej…";
+        document.getElementById("copy-progress-bar").value = total > 0 ? Math.min(100, done / total * 100) : 0;
+        document.getElementById("copy-progress-size").textContent = total > 0 ? `${(done / 1048576).toFixed(1)} MB z ${(total / 1048576).toFixed(1)} MB · ${data.files_done} z ${data.files_total} plików` : "Obliczanie rozmiaru strony…";
+        if (data.status === "active" || data.status === "failed") window.location.reload();
+        else window.setTimeout(pollProgress, 650);
+      } catch (_error) { window.setTimeout(pollProgress, 1500); }
+    };
+    pollProgress();
+  }
+
   if (chat) chat.scrollTop = chat.scrollHeight;
   document.getElementById("page-chat-select")?.addEventListener("change", event => { window.location.href = event.target.value; });
 
