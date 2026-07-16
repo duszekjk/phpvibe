@@ -199,6 +199,22 @@ def workspace_root(edit_session: EditSession) -> Path:
     return root
 
 
+def delete_workspace(edit_session: EditSession) -> None:
+    """Remove only the workspace directory belonging to this exact session."""
+    expected_root = (settings.WORKSPACE_ROOT / str(edit_session.pk) / "site").resolve()
+    workspace_parent = expected_root.parent
+    if edit_session.workspace_path:
+        configured_root = Path(edit_session.workspace_path).resolve()
+        if configured_root != expected_root:
+            raise WorkspaceError("Zapisana ścieżka kopii roboczej jest nieprawidłowa.")
+    if not workspace_parent.exists():
+        return
+    if not expected_root.is_dir():
+        raise WorkspaceError("Katalog rozmowy ma nieprawidłową strukturę i nie został usunięty.")
+    with workspace_operation_lock(edit_session):
+        shutil.rmtree(workspace_parent)
+
+
 @contextmanager
 def workspace_operation_lock(edit_session: EditSession):
     """Prevent concurrent edits, resets, and publishes for one workspace."""

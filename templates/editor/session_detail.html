@@ -80,6 +80,19 @@
             <button class="button success" type="submit">Opublikuj</button>
           </form>
         {% endif %}
+        {% if can_delete %}
+          <details class="workbench-details">
+            <summary>Więcej</summary>
+            <div class="details-popover session-menu-popover">
+              <h3>Usuń rozmowę</h3>
+              <p class="muted">Usunięta zostanie rozmowa, wszystkie czaty podstron, historia oraz cała kopia robocza. Tej operacji nie można cofnąć.</p>
+              <form method="post" action="{% url 'delete_session' edit_session.pk %}" onsubmit="return confirm('Trwale usunąć tę rozmowę i całą jej kopię roboczą?');">
+                {% csrf_token %}<input type="hidden" name="confirmation" value="DELETE">
+                <button class="button danger full" type="submit">Usuń rozmowę i kopię</button>
+              </form>
+            </div>
+          </details>
+        {% endif %}
       </div>
     </div>
   </section>

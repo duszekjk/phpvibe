@@ -253,6 +253,7 @@ class WorkspaceTests(TestCase):
         self.assertContains(response, 'src="/static/editor/workbench.js"')
         self.assertContains(response, 'href="/static/editor/workbench.css"')
         self.assertContains(response, "/__vibe_token/")
+        self.assertContains(response, f'/rozmowy/{item.pk}/usun/')
 
     def test_multiple_page_chats_share_one_workspace(self):
         item = self.new_session()
@@ -338,3 +339,35 @@ class WorkspaceTests(TestCase):
         )
         self.assertIn(f"/vibe/{session_id}/__vibe_token/signed%3Atoken.with-safe_parts/pliki/index.php", url)
         self.assertIn("__vibe_token=signed%3Atoken.with-safe_parts", url)
+
+    def test_owner_can_delete_session_and_its_entire_workspace(self):
+        item = self.new_session()
+        workspace_parent = Path(item.workspace_path).parent
+        self.client.force_login(self.user)
+
+        response = self.client.post(
+            f"/rozmowy/{item.pk}/usun/",
+            {"confirmation": "DELETE"},
+            secure=True,
+        )
+
+        self.assertRedirects(response, "/", fetch_redirect_response=False)
+        self.assertFalse(EditSession.objects.filter(pk=item.pk).exists())
+        self.assertFalse(workspace_parent.exists())
+
+    def test_another_site_member_cannot_delete_someone_elses_session(self):
+        item = self.new_session()
+        workspace_parent = Path(item.workspace_path).parent
+        other = get_user_model().objects.create_user("adam", password="secret123")
+        SiteMembership.objects.create(site=self.site, user=other, role=SiteMembership.Role.PUBLISHER)
+        self.client.force_login(other)
+
+        response = self.client.post(
+            f"/rozmowy/{item.pk}/usun/",
+            {"confirmation": "DELETE"},
+            secure=True,
+        )
+
+        self.assertEqual(response.status_code, 403)
+        self.assertTrue(EditSession.objects.filter(pk=item.pk).exists())
+        self.assertTrue(workspace_parent.exists())

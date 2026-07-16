@@ -300,3 +300,12 @@
 .workbench-toast[data-kind="success"] {
   background: var(--jade-11);
 }
+
+.session-menu-popover p {
+  margin: 0 0 14px;
+  font-size: 13px;
+}
+
+.session-menu-popover form {
+  margin: 0;
+}

@@ -13,5 +13,6 @@ urlpatterns = [
     path("rozmowy/<uuid:session_id>/strony/<uuid:conversation_id>/edytuj-tekst/", views.inline_edit, name="inline_edit"),
     path("rozmowy/<uuid:session_id>/przywroc/", views.reset_session, name="reset_session"),
     path("rozmowy/<uuid:session_id>/publikuj/", views.publish_session, name="publish_session"),
+    path("rozmowy/<uuid:session_id>/usun/", views.delete_session, name="delete_session"),
     path("wewnetrzne/podglad/<uuid:session_id>/autoryzuj/", views.preview_authorize, name="preview_authorize"),
 ]

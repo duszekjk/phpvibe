@@ -15,7 +15,14 @@ from .navigation import get_or_create_page_conversation
 from .permissions import session_for_user
 from .preview_access import add_preview_token, make_preview_token, verify_preview_token
 from .services.assistant import AssistantError, run_chat_turn
-from .services.workspaces import WorkspaceError, create_workspace, current_diff, publish_workspace, reset_workspace
+from .services.workspaces import (
+    WorkspaceError,
+    create_workspace,
+    current_diff,
+    delete_workspace,
+    publish_workspace,
+    reset_workspace,
+)
 
 
 @login_required
@@ -70,6 +77,7 @@ def session_detail(request, session_id, conversation_id=None):
     conversation = _page_for_session(edit_session, conversation_id)
     membership = SiteMembership.objects.filter(site=edit_session.site, user=request.user).first()
     can_publish = request.user.is_superuser or (membership and membership.role == SiteMembership.Role.PUBLISHER)
+    can_delete = request.user.is_superuser or edit_session.owner_id == request.user.pk
     try:
         config = load_site_config(edit_session.site.config_key)
         preview_base_url = config.preview_url(edit_session.pk)
@@ -100,6 +108,7 @@ def session_detail(request, session_id, conversation_id=None):
         "preview_base_url": preview_base_url,
         "allowed_hosts": allowed_hosts,
         "can_publish": can_publish,
+        "can_delete": can_delete,
         "publish_configured": publish_configured,
         "diff": diff,
     })
@@ -214,6 +223,26 @@ def publish_session(request, session_id):
     else:
         messages.success(request, f"Opublikowano {len(paths)} zmienionych plików. Kopia bezpieczeństwa została zachowana.")
     return _return_to_page(edit_session, request)
+
+
+@login_required
+@require_POST
+def delete_session(request, session_id):
+    edit_session = session_for_user(request.user, session_id)
+    if not request.user.is_superuser and edit_session.owner_id != request.user.pk:
+        raise PermissionDenied("Tylko właściciel rozmowy może ją usunąć.")
+    if request.POST.get("confirmation") != "DELETE":
+        messages.error(request, "Nie potwierdzono usunięcia rozmowy.")
+        return redirect(edit_session)
+    try:
+        delete_workspace(edit_session)
+    except WorkspaceError as exc:
+        messages.error(request, str(exc))
+        return redirect(edit_session)
+    title = edit_session.title
+    edit_session.delete()
+    messages.success(request, f"Usunięto rozmowę „{title}” i jej kopię roboczą.")
+    return redirect("dashboard")
 
 
 def preview_authorize(request, session_id):
