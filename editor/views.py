@@ -31,7 +31,11 @@ from .services.workspaces import (
 
 @login_required
 def dashboard(request):
-    sessions = EditSession.objects.filter(site__memberships__user=request.user).select_related("site").distinct()[:30]
+    sessions = list(
+        EditSession.objects.filter(site__memberships__user=request.user).select_related("site").distinct()[:30]
+    )
+    for item in sessions:
+        item.can_delete_from_dashboard = request.user.is_superuser or item.owner_id == request.user.pk
     return render(request, "editor/dashboard.html", {"sessions": sessions})
 
 

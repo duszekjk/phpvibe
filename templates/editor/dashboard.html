@@ -8,10 +8,18 @@
   {% if sessions %}
     <div class="session-list">
       {% for item in sessions %}
-        <a href="{{ item.get_absolute_url }}" class="session-item">
-          <div><strong>{{ item.title }}</strong><span>{{ item.site.name }} · {{ item.target_url|truncatechars:75 }}</span></div>
-          <div class="session-meta"><span class="status {{ item.status }}">{{ item.get_status_display }}</span><time>{{ item.updated_at|date:"d.m.Y H:i" }}</time></div>
-        </a>
+        <div class="session-row">
+          <a href="{{ item.get_absolute_url }}" class="session-item">
+            <div><strong>{{ item.title }}</strong><span>{{ item.site.name }} · {{ item.target_url|truncatechars:75 }}</span></div>
+            <div class="session-meta"><span class="status {{ item.status }}">{{ item.get_status_display }}</span><time>{{ item.updated_at|date:"d.m.Y H:i" }}</time></div>
+          </a>
+          {% if item.can_delete_from_dashboard %}
+            <form method="post" action="{% url 'delete_session' item.pk %}" class="session-delete-form" onsubmit="return confirm('Trwale usunąć tę rozmowę i całą jej kopię roboczą?');">
+              {% csrf_token %}<input type="hidden" name="confirmation" value="DELETE">
+              <button type="submit" class="session-delete-button" aria-label="Usuń rozmowę {{ item.title }}">Usuń</button>
+            </form>
+          {% endif %}
+        </div>
       {% endfor %}
     </div>
   {% else %}

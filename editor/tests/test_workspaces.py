@@ -491,6 +491,27 @@ required = true
         self.assertFalse(EditSession.objects.filter(pk=item.pk).exists())
         self.assertFalse(workspace_parent.exists())
 
+    def test_owner_sees_delete_action_on_dashboard(self):
+        item = self.new_session()
+        self.client.force_login(self.user)
+
+        response = self.client.get(reverse("dashboard"), secure=True)
+
+        self.assertEqual(response.status_code, 200)
+        self.assertContains(response, reverse("delete_session", kwargs={"session_id": item.pk}))
+        self.assertContains(response, "Usuń")
+
+    def test_other_site_member_does_not_see_dashboard_delete_action(self):
+        item = self.new_session()
+        other = get_user_model().objects.create_user("dashboard-viewer", password="secret123")
+        SiteMembership.objects.create(site=self.site, user=other, role=SiteMembership.Role.PUBLISHER)
+        self.client.force_login(other)
+
+        response = self.client.get(reverse("dashboard"), secure=True)
+
+        self.assertEqual(response.status_code, 200)
+        self.assertNotContains(response, reverse("delete_session", kwargs={"session_id": item.pk}))
+
     def test_another_site_member_cannot_delete_someone_elses_session(self):
         item = self.new_session()
         workspace_parent = Path(item.workspace_path).parent

@@ -260,24 +260,57 @@ h2 {
   flex-direction: column;
 }
 
+.session-row {
+  display: flex;
+  align-items: stretch;
+  border-bottom: 1px solid var(--line);
+}
+
+.session-row:last-child {
+  border-bottom: 0;
+}
+
 .session-item {
+  flex: 1;
+  min-width: 0;
   display: flex;
   justify-content: space-between;
   gap: 24px;
   padding: 19px 22px;
   text-decoration: none;
   color: inherit;
-  border-bottom: 1px solid var(--line);
   transition: background .15s ease, box-shadow .15s ease;
-}
-
-.session-item:last-child {
-  border-bottom: 0;
 }
 
 .session-item:hover {
   background: var(--orange-2);
   box-shadow: inset 3px 0 var(--orange-9);
+}
+
+.session-delete-form {
+  display: flex;
+  align-items: center;
+  padding: 12px 16px 12px 4px;
+}
+
+.session-delete-button {
+  border: 1px solid var(--tomato-6);
+  border-radius: 9px;
+  padding: 8px 11px;
+  background: var(--tomato-3);
+  color: var(--tomato-12);
+  font-size: 12px;
+  font-weight: 780;
+  cursor: pointer;
+}
+
+.session-delete-button:hover {
+  background: var(--tomato-6);
+}
+
+.session-delete-button:focus-visible {
+  outline: 3px solid var(--tomato-6);
+  outline-offset: 2px;
 }
 
 .session-item div:first-child {
@@ -648,6 +681,10 @@ h2 {
 
   .session-item {
     flex-direction: column;
+  }
+
+  .session-delete-form {
+    padding-left: 0;
   }
 
   .session-meta {
