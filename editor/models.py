@@ -8,7 +8,14 @@ from django.urls import reverse
 class Site(models.Model):
     name = models.CharField("nazwa", max_length=120)
     slug = models.SlugField(unique=True)
-    config_key = models.SlugField("klucz konfiguracji", unique=True)
+    config_key = models.SlugField(
+        "plik konfiguracji strony",
+        unique=True,
+        help_text=(
+            "Nazwa pliku TOML bez rozszerzenia. Przykładowo wartość "
+            "„jerozolima” oznacza plik site_configs/jerozolima.toml."
+        ),
+    )
     is_active = models.BooleanField("aktywna", default=True)
     users = models.ManyToManyField(settings.AUTH_USER_MODEL, through="SiteMembership", related_name="editable_sites")
 
