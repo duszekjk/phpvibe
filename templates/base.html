@@ -1,11 +1,11 @@
-{% load static %}
+{% load versioned_static %}
 <!doctype html>
 <html lang="pl">
 <head>
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
   <title>{% block title %}PHP Vibe{% endblock %}</title>
-  <link rel="stylesheet" href="{% static 'editor/app.css' %}">
+  <link rel="stylesheet" href="{% versioned_static 'editor/app.css' %}">
   {% block extra_head %}{% endblock %}
 </head>
 <body class="{% block body_class %}{% endblock %}">

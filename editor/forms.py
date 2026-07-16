@@ -1,6 +1,5 @@
-from urllib.parse import urlparse
-
 from django import forms
+from django.core.exceptions import ValidationError
 
 from .config import load_site_config
 from .models import EditSession, Site
@@ -20,17 +19,18 @@ class StartSessionForm(forms.ModelForm):
         self.fields["site"].queryset = Site.objects.filter(is_active=True, memberships__user=user).distinct()
 
     def clean(self):
+        from .navigation import normalize_page_url
+
         data = super().clean()
         site = data.get("site")
         target_url = data.get("target_url")
         if not site or not target_url:
             return data
         config = load_site_config(site.config_key)
-        parsed = urlparse(target_url)
-        if parsed.scheme not in {"http", "https"} or not parsed.hostname:
-            self.add_error("target_url", "Podaj pełny adres HTTP lub HTTPS.")
-        elif parsed.hostname.lower() not in config.allowed_hosts:
-            self.add_error("target_url", "Ten adres nie należy do wybranej strony.")
+        try:
+            data["target_url"] = normalize_page_url(target_url, config.allowed_hosts)
+        except ValidationError as exc:
+            self.add_error("target_url", exc)
         return data
 
 

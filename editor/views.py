@@ -14,7 +14,7 @@ from django.views.decorators.http import require_POST
 from .config import load_site_config
 from .forms import ChatForm, InlineEditForm, PageAddressForm, StartSessionForm
 from .models import EditSession, PageConversation, SiteMembership
-from .navigation import get_or_create_page_conversation
+from .navigation import get_or_create_page_conversation, repair_page_conversation
 from .permissions import session_for_user
 from .preview_access import add_preview_token, make_preview_token, verify_preview_token
 from .services.assistant import AssistantError, run_chat_turn
@@ -65,9 +65,10 @@ def _prepare_workspace(session_id):
 
 def _page_for_session(edit_session, conversation_id=None):
     if conversation_id:
-        return get_object_or_404(PageConversation, pk=conversation_id, session=edit_session)
+        conversation = get_object_or_404(PageConversation, pk=conversation_id, session=edit_session)
+        return repair_page_conversation(edit_session, conversation)
     page, _created = get_or_create_page_conversation(edit_session, edit_session.target_url)
-    return page
+    return repair_page_conversation(edit_session, page)
 
 
 def _return_to_page(edit_session, request):

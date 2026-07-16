@@ -11,7 +11,7 @@ from django.urls import reverse
 
 from editor.config import load_site_config
 from editor.forms import StartSessionForm
-from editor.models import EditSession, Site, SiteMembership
+from editor.models import ChatMessage, EditSession, PageConversation, Site, SiteMembership
 from editor.navigation import get_or_create_page_conversation, normalize_page_url
 from editor.preview_access import add_preview_token, make_preview_token
 from editor.services.assistant import AssistantError, _replay_input, run_chat_turn
@@ -185,6 +185,18 @@ class WorkspaceTests(TestCase):
         with self.assertRaises(ValidationError):
             normalize_page_url("https://example.org:not-a-port/", frozenset({"example.org"}))
 
+    def test_page_url_removes_preview_token_path_and_query(self):
+        url = normalize_page_url(
+            "https://example.org/__vibe_token/signed%3Atoken/"
+            "?strona=wspolnota&podstrona=diakonie&__vibe_token=signed%3Atoken&diakonie=medialna",
+            frozenset({"example.org"}),
+        )
+
+        self.assertEqual(
+            url,
+            "https://example.org/?strona=wspolnota&podstrona=diakonie&diakonie=medialna",
+        )
+
     def test_config_rejects_missing_preview_template(self):
         config_path = self.config_dir / "test.toml"
         config_path.write_text(
@@ -324,10 +336,37 @@ required = true
         response = self.client.get(item.get_absolute_url(), secure=True)
         self.assertEqual(response.status_code, 200)
         self.assertContains(response, "Nowy czat tej podstrony")
-        self.assertContains(response, 'src="/static/editor/workbench.js"')
-        self.assertContains(response, 'href="/static/editor/workbench.css"')
+        self.assertRegex(response.content.decode(), r'src="/static/editor/workbench\.js\?v=[0-9a-f]{12}"')
+        self.assertRegex(response.content.decode(), r'href="/static/editor/workbench\.css\?v=[0-9a-f]{12}"')
         self.assertContains(response, "/__vibe_token/")
         self.assertContains(response, f'/rozmowy/{item.pk}/usun/')
+
+    def test_obsolete_token_conversation_is_repaired_on_open(self):
+        item = self.new_session()
+        expected = item.conversations.get()
+        broken_url = "https://example.org/__vibe_token/old-token/?strona=start"
+        broken = PageConversation.objects.create(
+            session=item,
+            target_url=broken_url,
+            normalized_url=broken_url,
+            label="Błędny adres",
+        )
+        message = ChatMessage.objects.create(
+            session=item,
+            conversation=broken,
+            role=ChatMessage.Role.USER,
+            content="Zachowaj tę wiadomość",
+        )
+        self.client.force_login(self.user)
+
+        response = self.client.get(broken.get_absolute_url(), secure=True)
+
+        self.assertEqual(response.status_code, 200)
+        self.assertEqual(response.context["conversation"].pk, expected.pk)
+        self.assertEqual(response.context["conversation"].target_url, "https://example.org/?strona=start")
+        self.assertFalse(PageConversation.objects.filter(pk=broken.pk).exists())
+        message.refresh_from_db()
+        self.assertEqual(message.conversation_id, expected.pk)
 
     def test_multiple_page_chats_share_one_workspace(self):
         item = self.new_session()

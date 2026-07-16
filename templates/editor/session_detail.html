@@ -1,8 +1,8 @@
 {% extends "base.html" %}
-{% load static %}
+{% load versioned_static %}
 {% block title %}{{ edit_session.title }} · PHP Vibe{% endblock %}
 {% block body_class %}editor-mode{% endblock %}
-{% block extra_head %}<link rel="stylesheet" href="{% static 'editor/workbench.css' %}">{% endblock %}
+{% block extra_head %}<link rel="stylesheet" href="{% versioned_static 'editor/workbench.css' %}">{% endblock %}
 {% block content %}
 <div class="workbench-heading">
   <a class="workbench-back" href="{% url 'dashboard' %}" aria-label="Wróć do rozmów">←</a>
@@ -153,5 +153,5 @@
 </dialog>
 
 <div class="workbench-toast" id="workbench-toast" role="status"></div>
-<script src="{% static 'editor/workbench.js' %}"></script>
+<script src="{% versioned_static 'editor/workbench.js' %}"></script>
 {% endblock %}
