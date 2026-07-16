@@ -81,3 +81,51 @@ SESSION_COOKIE_SECURE = os.environ.get("DJANGO_SECURE_COOKIES", "1") == "1"
 CSRF_COOKIE_SECURE = os.environ.get("DJANGO_SECURE_COOKIES", "1") == "1"
 SECURE_CONTENT_TYPE_NOSNIFF = True
 X_FRAME_OPTIONS = "DENY"
+
+# LaunchAgent redirects stderr to phpvibe-error.log. Keep Django's exception
+# tracebacks on that stream instead of relying on Gunicorn's lifecycle-only
+# messages. Python's logging formatter appends exc_info automatically, so an
+# unhandled HTTP 500 includes the complete traceback after this first line.
+LOGGING = {
+    "version": 1,
+    "disable_existing_loggers": False,
+    "formatters": {
+        "diagnostic": {
+            "format": "{asctime} {levelname} pid={process} {name} {module}:{lineno} {message}",
+            "style": "{",
+        },
+    },
+    "handlers": {
+        "stderr": {
+            "class": "logging.StreamHandler",
+            "formatter": "diagnostic",
+            "stream": "ext://sys.stderr",
+        },
+    },
+    "root": {
+        "handlers": ["stderr"],
+        "level": os.environ.get("DJANGO_LOG_LEVEL", "INFO"),
+    },
+    "loggers": {
+        "django": {
+            "handlers": ["stderr"],
+            "level": os.environ.get("DJANGO_LOG_LEVEL", "INFO"),
+            "propagate": False,
+        },
+        "django.request": {
+            "handlers": ["stderr"],
+            "level": "ERROR",
+            "propagate": False,
+        },
+        "django.security": {
+            "handlers": ["stderr"],
+            "level": "WARNING",
+            "propagate": False,
+        },
+        "editor": {
+            "handlers": ["stderr"],
+            "level": os.environ.get("DJANGO_LOG_LEVEL", "INFO"),
+            "propagate": False,
+        },
+    },
+}
