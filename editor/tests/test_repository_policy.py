@@ -82,6 +82,7 @@ class RepositoryPolicyTests(unittest.TestCase):
         self.assertTrue(config["allowed_hosts"])
         self.assertIn(".env", config["protected_paths"])
         self.assertTrue(config["preview_replacements"])
+        self.assertEqual(config["asset_upload_path"], "pliki/images/phpvibe")
 
     def test_templates_reference_existing_static_assets(self):
         expected = {

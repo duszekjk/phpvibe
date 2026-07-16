@@ -69,6 +69,7 @@ WORKSPACE_ROOT = Path(os.environ.get("VIBE_WORKSPACE_ROOT", BASE_DIR / "var" / "
 OPENAI_MODEL = os.environ.get("OPENAI_MODEL", "gpt-5.6-terra")
 OPENAI_MAX_TOOL_ROUNDS = int(os.environ.get("OPENAI_MAX_TOOL_ROUNDS", "12"))
 FILE_MAX_BYTES = int(os.environ.get("VIBE_FILE_MAX_BYTES", str(512 * 1024)))
+IMAGE_UPLOAD_MAX_BYTES = int(os.environ.get("VIBE_IMAGE_UPLOAD_MAX_BYTES", str(20 * 1024 * 1024)))
 PREVIEW_TOKEN_MAX_AGE = int(os.environ.get("VIBE_PREVIEW_TOKEN_MAX_AGE", str(8 * 60 * 60)))
 PANEL_ORIGIN = os.environ.get("VIBE_PANEL_ORIGIN", "https://phpvibe.duszekjk.com").rstrip("/")
 

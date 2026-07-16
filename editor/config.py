@@ -1,7 +1,7 @@
 from dataclasses import dataclass
 from fnmatch import fnmatch
 from functools import lru_cache
-from pathlib import Path
+from pathlib import Path, PurePosixPath
 import tomllib
 from urllib.parse import urlsplit, urlunsplit
 
@@ -30,6 +30,7 @@ class SiteConfig:
     preview_replacements: tuple[PreviewReplacement, ...]
     publish_enabled: bool
     backup_path: Path | None
+    asset_upload_path: str
 
     def preview_url(self, session_id, target_url: str | None = None) -> str:
         base = self.preview_url_template.format(session_id=session_id)
@@ -44,6 +45,9 @@ class SiteConfig:
 
     def is_protected(self, relative_path: str) -> bool:
         return any(fnmatch(relative_path, pattern) for pattern in self.protected_paths)
+
+    def is_uploaded_asset(self, relative_path: str) -> bool:
+        return relative_path.startswith(f"{self.asset_upload_path}/")
 
 
 @lru_cache(maxsize=64)
@@ -109,6 +113,17 @@ def load_site_config(key: str) -> SiteConfig:
     if backup_path is not None and (backup_path == root or root in backup_path.parents):
         raise ImproperlyConfigured("backup_path musi znajdować się poza katalogiem strony produkcyjnej.")
     configured_protected = tuple(raw.get("protected_paths", [".env", ".env.*", "*secret*", "*credentials*"]))
+    asset_upload_path = str(raw.get("asset_upload_path", "pliki/images/phpvibe")).strip().strip("/")
+    upload_parts = PurePosixPath(asset_upload_path)
+    if (
+        not asset_upload_path
+        or upload_parts.is_absolute()
+        or any(part in {"", ".", ".."} for part in upload_parts.parts)
+        or "\\" in asset_upload_path
+    ):
+        raise ImproperlyConfigured("asset_upload_path musi być bezpieczną ścieżką względną w katalogu strony.")
+    if any(fnmatch(f"{asset_upload_path}/test.webp", pattern) for pattern in configured_protected):
+        raise ImproperlyConfigured("asset_upload_path nie może wskazywać chronionego katalogu.")
     preview_replacements_list = []
     seen_replacements = set()
     for item in raw.get("preview_replacements", []):
@@ -135,4 +150,5 @@ def load_site_config(key: str) -> SiteConfig:
         preview_replacements=preview_replacements,
         publish_enabled=publish_enabled,
         backup_path=backup_path,
+        asset_upload_path=asset_upload_path,
     )

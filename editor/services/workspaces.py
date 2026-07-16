@@ -34,6 +34,7 @@ class WorkspaceBusyError(WorkspaceError):
 
 
 PREVIEW_ASSET_DIR = "__phpvibe_preview"
+UPLOADED_IMAGE_EXTENSIONS = frozenset({".webp"})
 
 
 if sys.platform == "darwin":
@@ -342,13 +343,19 @@ def atomic_write(path: Path, content: str) -> None:
     encoded = content.encode("utf-8")
     if len(encoded) > settings.FILE_MAX_BYTES:
         raise WorkspaceError(f"Plik przekracza limit {settings.FILE_MAX_BYTES} bajtów.")
+    atomic_write_bytes(path, encoded, max_bytes=settings.FILE_MAX_BYTES)
+
+
+def atomic_write_bytes(path: Path, content: bytes, *, max_bytes: int) -> None:
+    if len(content) > max_bytes:
+        raise WorkspaceError(f"Plik przekracza limit {max_bytes} bajtów.")
     path.parent.mkdir(parents=True, exist_ok=True)
     mode = stat.S_IMODE(path.stat().st_mode) if path.exists() else 0o644
     descriptor, temp_name = tempfile.mkstemp(prefix=f".{path.name}.", dir=path.parent)
     try:
         os.fchmod(descriptor, mode)
         with os.fdopen(descriptor, "wb") as handle:
-            handle.write(encoded)
+            handle.write(content)
             handle.flush()
             os.fsync(handle.fileno())
         os.replace(temp_name, path)
@@ -382,6 +389,39 @@ def commit_change(edit_session: EditSession, summary: str) -> Revision | None:
         summary=summary[:240],
         changed_files=files,
     )
+
+
+def commit_paths(edit_session: EditSession, summary: str, relative_paths: list[str]) -> Revision:
+    """Commit explicit generated assets after validating their workspace location."""
+    root = workspace_root(edit_session)
+    config = load_site_config(edit_session.site.config_key)
+    paths = []
+    for relative in sorted(set(relative_paths)):
+        target = safe_path(edit_session, relative)
+        if config.is_protected(relative):
+            raise PermissionDenied("Plik obrazu znajduje się w chronionym katalogu.")
+        if not config.is_uploaded_asset(relative) or target.suffix.lower() not in UPLOADED_IMAGE_EXTENSIONS:
+            raise PermissionDenied("Plik nie jest dozwolonym obrazem przesłanym przez użytkownika.")
+        paths.append(relative)
+    if not paths:
+        raise WorkspaceError("Nie powstał żaden wariant obrazu.")
+    changed = _run_git(root, "status", "--short", "--untracked-files=all", "--", *paths).splitlines()
+    if not changed:
+        raise WorkspaceError("Warianty obrazu nie zmieniły kopii roboczej.")
+    previous_head = _run_git(root, "rev-parse", "HEAD")
+    try:
+        _run_git(root, "add", "--all", "--force", "--", *paths)
+        _run_git(root, "commit", "--quiet", "-m", summary[:240])
+        commit_hash = _run_git(root, "rev-parse", "HEAD")
+        return Revision.objects.create(
+            session=edit_session,
+            commit_hash=commit_hash,
+            summary=summary[:240],
+            changed_files=paths,
+        )
+    except Exception:
+        _run_git(root, "reset", "--hard", previous_head)
+        raise
 
 
 def working_tree_changed_paths(edit_session: EditSession) -> list[str]:
@@ -523,8 +563,13 @@ def _publish_workspace_locked(locked: EditSession) -> list[str]:
         original.parent.mkdir(parents=True, exist_ok=True)
         if production.exists():
             shutil.copy2(production, original)
-        published_content = remove_preview_layer(locked, relative, working.read_text(encoding="utf-8"))
-        atomic_write(production, published_content)
+        if working.suffix.lower() in config.allowed_extensions:
+            published_content = remove_preview_layer(locked, relative, working.read_text(encoding="utf-8"))
+            atomic_write(production, published_content)
+        elif config.is_uploaded_asset(relative) and working.suffix.lower() in UPLOADED_IMAGE_EXTENSIONS:
+            atomic_write_bytes(production, working.read_bytes(), max_bytes=settings.IMAGE_UPLOAD_MAX_BYTES)
+        else:
+            raise WorkspaceError(f"Niedozwolony typ pliku do publikacji: {relative}")
 
     locked.status = EditSession.Status.PUBLISHED
     locked.published_at = timezone.now()

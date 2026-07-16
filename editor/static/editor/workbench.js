@@ -9,6 +9,8 @@
   const toast = document.getElementById("workbench-toast");
   const loading = document.getElementById("preview-loading");
   const chat = document.getElementById("chat-messages");
+  const imageInput = document.getElementById("id_image");
+  const imagePreview = document.getElementById("composer-image-preview");
   let editMode = false;
   let bridgeReady = false;
   let navigating = false;
@@ -38,6 +40,21 @@
   }
 
   if (chat) chat.scrollTop = chat.scrollHeight;
+  imageInput?.addEventListener("change", () => {
+    const file = imageInput.files?.[0];
+    const previewImage = imagePreview?.querySelector("img");
+    const previewName = document.getElementById("composer-image-name");
+    if (imagePreview?.dataset.objectUrl) URL.revokeObjectURL(imagePreview.dataset.objectUrl);
+    if (!file) {
+      imagePreview?.classList.remove("visible");
+      return;
+    }
+    const objectUrl = URL.createObjectURL(file);
+    imagePreview.dataset.objectUrl = objectUrl;
+    previewImage.src = objectUrl;
+    previewName.textContent = file.name;
+    imagePreview.classList.add("visible");
+  });
   document.getElementById("page-chat-select")?.addEventListener("change", event => { window.location.href = event.target.value; });
 
   function csrfToken() {

@@ -38,8 +38,20 @@ class ChatForm(forms.Form):
     message = forms.CharField(
         label="",
         max_length=20_000,
+        required=False,
         widget=forms.Textarea(attrs={"rows": 4, "placeholder": "Opisz zmianę zwykłymi słowami…"}),
     )
+    image = forms.FileField(
+        label="Dodaj zdjęcie",
+        required=False,
+        widget=forms.FileInput(attrs={"accept": "image/jpeg,image/png,image/webp,image/gif"}),
+    )
+
+    def clean(self):
+        data = super().clean()
+        if not data.get("message", "").strip() and not data.get("image"):
+            raise ValidationError("Napisz wiadomość albo dodaj zdjęcie.")
+        return data
 
 
 class PageAddressForm(forms.Form):

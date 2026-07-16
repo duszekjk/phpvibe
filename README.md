@@ -49,6 +49,7 @@ Najważniejsze zmienne:
 - `OPENAI_API_KEY` — klucz przechowywany wyłącznie po stronie serwera;
 - `OPENAI_MODEL` — domyślnie `gpt-5.6-terra`;
 - `OPENAI_MAX_TOOL_ROUNDS` i `VIBE_FILE_MAX_BYTES`;
+- `VIBE_IMAGE_UPLOAD_MAX_BYTES` — maksymalny rozmiar zdjęcia źródłowego, domyślnie 20 MB;
 - `VIBE_PREVIEW_TOKEN_MAX_AGE` — czas ważności tokenu podglądu, domyślnie 8 godzin.
 
 ## Konfiguracja strony
@@ -118,6 +119,12 @@ sudo apachectl graceful
 ```
 
 Pliki `__phpvibe_preview`, style zaznaczania i bridge są częścią wyłącznie kopii. Nie występują w produkcji, nie są widoczne dla narzędzi OpenAI i publikator odrzuci próbę ich wysłania. Konfiguracja może też zawierać `preview_replacements`, np. wyłączenie przekierowania testowej kopii `index.php` do `https://jerozolima.org`. Aplikacja zapamiętuje każdą zastosowaną transformację, odwraca ją przed publikacją i przerywa publikację, jeśli nie potrafi zrobić tego jednoznacznie.
+
+### Zdjęcia w czacie
+
+Czat przyjmuje jeden obraz JPEG, PNG, WebP albo nieanimowany GIF na wiadomość. Serwer sprawdza rzeczywistą zawartość pliku, usuwa metadane i zapisuje w `asset_upload_path` cztery warianty WebP zachowujące proporcje: `large` (do 2560 px), `background` (do 1920 px), `content` (do 1280 px) i `button` (do 800 px). Model otrzymuje do analizy wariant `content` oraz dokładne ścieżki wszystkich wariantów, dzięki czemu może użyć tego samego zdjęcia jednocześnie jako tła i grafiki przycisku bez ładowania niepotrzebnie dużego pliku.
+
+Warianty są częścią historii Git kopii roboczej, znikają po przywróceniu początku i są publikowane binarnie razem ze zmianami PHP/CSS. Katalog ustawia się per strona, np. `asset_upload_path = "pliki/images/phpvibe"`.
 
 ## Publikacja i odzyskiwanie
 

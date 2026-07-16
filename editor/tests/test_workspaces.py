@@ -1,3 +1,4 @@
+from io import BytesIO
 from pathlib import Path
 import stat
 import subprocess
@@ -7,6 +8,7 @@ from unittest.mock import Mock, patch
 
 from django.contrib.auth import get_user_model
 from django.core.exceptions import ImproperlyConfigured, PermissionDenied, ValidationError
+from django.core.files.uploadedfile import SimpleUploadedFile
 from django.test import TestCase, override_settings
 from django.urls import reverse
 
@@ -17,6 +19,7 @@ from editor.navigation import get_or_create_page_conversation, normalize_page_ur
 from editor.preview_access import add_preview_token, make_preview_token
 from editor.services.assistant import AssistantError, _replay_input, run_chat_turn
 from editor.services.file_tools import read_file, replace_text, write_file
+from editor.services.images import ImageUploadError, process_image_upload
 from editor.services.workspaces import (
     WorkspaceBusyError,
     WorkspaceError,
@@ -76,6 +79,13 @@ class WorkspaceTests(TestCase):
         item.refresh_from_db()
         get_or_create_page_conversation(item, item.target_url)
         return item
+
+    def image_upload(self, name="duze-zdjecie.jpg", size=(3000, 1800), color=(220, 90, 30)):
+        from PIL import Image
+
+        output = BytesIO()
+        Image.new("RGB", size, color).save(output, format="JPEG", quality=92)
+        return SimpleUploadedFile(name, output.getvalue(), content_type="image/jpeg")
 
     def test_path_cannot_escape_workspace(self):
         item = self.new_session()
@@ -226,6 +236,62 @@ class WorkspaceTests(TestCase):
         self.assertTrue((root / "photo.jpg").is_file())
         self.assertNotIn("photo.jpg", tracked)
         self.assertIn("index.php", tracked)
+
+    def test_uploaded_image_creates_optimized_tracked_variants(self):
+        item = self.new_session()
+
+        attachment = process_image_upload(item, self.image_upload())
+
+        self.assertEqual(set(attachment["variants"]), {"large", "background", "content", "button"})
+        self.assertEqual((attachment["source_width"], attachment["source_height"]), (3000, 1800))
+        root = Path(item.workspace_path)
+        tracked = subprocess.run(
+            ["git", "ls-files"], cwd=root, check=True, capture_output=True, text=True
+        ).stdout.splitlines()
+        limits = {"large": 2560, "background": 1920, "content": 1280, "button": 800}
+        for name, variant in attachment["variants"].items():
+            path = root / variant["path"]
+            self.assertTrue(path.is_file())
+            self.assertEqual(path.read_bytes()[:4], b"RIFF")
+            self.assertLessEqual(max(variant["width"], variant["height"]), limits[name])
+            self.assertIn(variant["path"], tracked)
+        self.assertEqual(item.revisions.count(), 1)
+        self.assertEqual(
+            set(item.revisions.get().changed_files),
+            {variant["path"] for variant in attachment["variants"].values()},
+        )
+
+    def test_uploaded_image_is_removed_by_reset(self):
+        item = self.new_session()
+        attachment = process_image_upload(item, self.image_upload(size=(1200, 800)))
+
+        reset_workspace(item)
+
+        root = Path(item.workspace_path)
+        for variant in attachment["variants"].values():
+            self.assertFalse((root / variant["path"]).exists())
+
+    def test_uploaded_image_variants_are_published_as_binary_files(self):
+        item = self.new_session()
+        attachment = process_image_upload(item, self.image_upload(size=(1400, 900)))
+
+        paths = publish_workspace(item)
+
+        self.assertEqual(set(paths), {variant["path"] for variant in attachment["variants"].values()})
+        for variant in attachment["variants"].values():
+            self.assertEqual(
+                (self.source / variant["path"]).read_bytes(),
+                (Path(item.workspace_path) / variant["path"]).read_bytes(),
+            )
+
+    def test_invalid_image_upload_is_rejected_without_workspace_change(self):
+        item = self.new_session()
+        upload = SimpleUploadedFile("udawane.jpg", b"not-an-image", content_type="image/jpeg")
+
+        with self.assertRaisesRegex(ImageUploadError, "prawidłowym"):
+            process_image_upload(item, upload)
+
+        self.assertEqual(changed_paths(item), [])
 
     def test_reset_restores_files_ignored_by_the_legacy_site(self):
         (self.source / ".gitignore").write_text("generated.txt\ncache.txt\n", encoding="utf-8")
@@ -540,6 +606,76 @@ required = true
 
         self.assertEqual(message.content, "Gotowe.")
         self.assertEqual(client.responses.create.call_count, 2)
+
+    def test_uploaded_image_is_sent_to_responses_api_and_visible_in_chat(self):
+        item = self.new_session()
+        conversation = item.conversations.get()
+        attachment = process_image_upload(item, self.image_upload(size=(1000, 700)))
+        final = SimpleNamespace(id="response-image", output=[], output_text="Użyłem zdjęcia.")
+        client = SimpleNamespace(responses=SimpleNamespace(create=Mock(return_value=final)))
+
+        with patch("openai.OpenAI", return_value=client):
+            message = run_chat_turn(
+                item,
+                conversation,
+                "Ustaw jako tło.",
+                model_text="Ustaw jako tło. Wariant background: /example.webp",
+                attachments=[attachment],
+            )
+
+        request = client.responses.create.call_args.kwargs
+        content = request["input"][0]["content"]
+        self.assertEqual(content[0]["type"], "input_text")
+        self.assertEqual(content[1]["type"], "input_image")
+        self.assertEqual(content[1]["detail"], "high")
+        self.assertTrue(content[1]["image_url"].startswith("data:image/webp;base64,"))
+        self.assertEqual(message.context, {})
+        user_message = conversation.messages.get(role=ChatMessage.Role.USER)
+        self.assertEqual(user_message.context["attachments"][0]["name"], "duze-zdjecie.jpg")
+
+        self.client.force_login(self.user)
+        response = self.client.get(
+            reverse("message_attachment", kwargs={
+                "session_id": item.pk,
+                "message_id": user_message.pk,
+                "variant": "content",
+            }),
+            secure=True,
+        )
+        self.assertEqual(response.status_code, 200)
+        self.assertEqual(response["Content-Type"], "image/webp")
+        self.assertEqual(
+            b"".join(response.streaming_content),
+            (Path(item.workspace_path) / attachment["variants"]["content"]["path"]).read_bytes(),
+        )
+
+    def test_chat_upload_processes_image_and_passes_all_variants_to_assistant(self):
+        item = self.new_session()
+        conversation = item.conversations.get()
+        self.client.force_login(self.user)
+
+        with patch("editor.views.run_chat_turn", return_value=SimpleNamespace(content="Gotowe.")) as run:
+            response = self.client.post(
+                reverse("send_message", kwargs={"session_id": item.pk, "conversation_id": conversation.pk}),
+                {"message": "Ustaw zdjęcie jako tło", "image": self.image_upload(size=(900, 600))},
+                secure=True,
+            )
+
+        self.assertRedirects(response, conversation.get_absolute_url(), fetch_redirect_response=False)
+        attachment = run.call_args.kwargs["attachments"][0]
+        self.assertEqual(set(attachment["variants"]), {"large", "background", "content", "button"})
+        self.assertIn("background-size: cover", run.call_args.kwargs["model_text"])
+        self.assertIn(attachment["variants"]["background"]["path"], run.call_args.kwargs["model_text"])
+
+    def test_workbench_renders_image_upload_control(self):
+        item = self.new_session()
+        self.client.force_login(self.user)
+
+        response = self.client.get(item.get_absolute_url(), secure=True)
+
+        self.assertContains(response, 'enctype="multipart/form-data"')
+        self.assertContains(response, 'id="id_image"')
+        self.assertContains(response, "Dodaj zdjęcie")
 
     def test_preview_auth_endpoint_requires_membership(self):
         item = self.new_session()

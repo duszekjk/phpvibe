@@ -15,6 +15,8 @@
 .preview-action-buttons .button:disabled{cursor:not-allowed;filter:saturate(.35)}
 @media(max-width:980px){.publish-block-reason{display:none}}
 
+.chat-composer{position:relative}.image-attach-button{width:38px;height:38px;flex:0 0 38px;display:grid;place-items:center;border:1px solid var(--sand-7);border-radius:10px;background:var(--sand-3);color:var(--orange-11);font-size:24px;font-weight:500;cursor:pointer}.image-attach-button:hover{background:var(--orange-3);border-color:var(--orange-7)}.image-attach-button input{position:absolute;width:1px;height:1px;opacity:0;pointer-events:none}.composer-image-preview{display:none;position:absolute;left:12px;right:12px;bottom:100%;margin-bottom:8px;padding:8px;align-items:center;gap:9px;border:1px solid var(--orange-6);border-radius:11px;background:var(--sand-1);box-shadow:0 10px 28px rgba(88,45,29,.18);font-size:11px;color:var(--sand-11)}.composer-image-preview.visible{display:flex}.composer-image-preview img{width:54px;height:42px;object-fit:cover;border-radius:7px}.composer-image-preview span{overflow:hidden;text-overflow:ellipsis;white-space:nowrap}.message-attachment{margin:0 0 8px}.message-attachment img{display:block;width:min(260px,100%);max-height:190px;object-fit:cover;border-radius:10px;border:1px solid var(--sand-6)}.message-attachment figcaption{margin-top:4px;color:var(--sand-10);font-size:10px}
+
 /* Ciepła warstwa aplikacji: Radix Sand dla powierzchni, Orange dla interakcji. */
 .editor-mode {
   background:

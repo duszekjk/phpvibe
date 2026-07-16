@@ -11,6 +11,7 @@ allowed_hosts = ["jerozolima.org", "www.jerozolima.org"]
 preview_url_template = "https://tmp.jerozolima.org/vibe/{session_id}/"
 
 allowed_extensions = [".php", ".css", ".js", ".html", ".txt", ".md", ".ics"]
+asset_upload_path = "pliki/images/phpvibe"
 ignored_names = [".git", ".DS_Store", "vendor", "node_modules"]
 protected_paths = [".env", ".env.*", "*secret*", "*credentials*", "config/private.php"]
 

@@ -131,7 +131,15 @@
       {% for item in conversation.messages.all %}
         <article class="message {{ item.role }}">
           <div class="avatar">{% if item.role == "user" %}Ty{% elif item.role == "system" %}✓{% else %}AI{% endif %}</div>
-          <div><p>{{ item.content|linebreaksbr }}</p><time>{{ item.created_at|date:"H:i" }}</time></div>
+          <div>
+            {% for attachment in item.context.attachments %}
+              <figure class="message-attachment">
+                <img src="{% url 'message_attachment' edit_session.pk item.pk 'content' %}" alt="Załączone zdjęcie {{ attachment.name }}">
+                <figcaption>{{ attachment.name }} · {{ attachment.source_width }}×{{ attachment.source_height }} px</figcaption>
+              </figure>
+            {% endfor %}
+            <p>{{ item.content|linebreaksbr }}</p><time>{{ item.created_at|date:"H:i" }}</time>
+          </div>
         </article>
       {% empty %}
         <div class="welcome compact-welcome">
@@ -142,8 +150,13 @@
     </div>
 
     {% if edit_session.status == "active" %}
-      <form method="post" action="{% url 'send_message' edit_session.pk conversation.pk %}" class="composer chat-composer">
-        {% csrf_token %}{{ chat_form.message }}
+      <form method="post" enctype="multipart/form-data" action="{% url 'send_message' edit_session.pk conversation.pk %}" class="composer chat-composer">
+        {% csrf_token %}
+        <label class="image-attach-button" title="Dodaj zdjęcie do wykorzystania na stronie">
+          {{ chat_form.image }}<span aria-hidden="true">＋</span><span class="sr-only">Dodaj zdjęcie</span>
+        </label>
+        <div class="composer-image-preview" id="composer-image-preview"><img alt="Podgląd załącznika"><span id="composer-image-name"></span></div>
+        {{ chat_form.message }}
         <button class="send-button" type="submit" aria-label="Wyślij wiadomość">↑</button>
       </form>
     {% endif %}

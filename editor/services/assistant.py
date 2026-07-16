@@ -1,13 +1,15 @@
 from __future__ import annotations
 
+import base64
 import json
 
 from django.conf import settings
+from django.core.exceptions import PermissionDenied
 from editor.config import load_site_config
 from editor.models import ChatMessage, EditSession, PageConversation
 
 from .file_tools import TOOL_SCHEMAS, execute_tool
-from .workspaces import WorkspaceBusyError, workspace_operation_lock
+from .workspaces import WorkspaceBusyError, WorkspaceError, safe_path, workspace_operation_lock
 
 
 class AssistantError(RuntimeError):
@@ -33,18 +35,41 @@ Opis struktury strony z zaufanej konfiguracji:
 """
 
 
+def _model_content(edit_session: EditSession, text: str, attachments: list[dict]) -> str | list[dict]:
+    if not attachments:
+        return text
+    content = [{"type": "input_text", "text": text}]
+    for attachment in attachments:
+        variant_name = attachment.get("analysis_variant", "content")
+        variant = attachment.get("variants", {}).get(variant_name, {})
+        try:
+            path = safe_path(edit_session, variant.get("path", ""))
+            encoded = base64.b64encode(path.read_bytes()).decode("ascii")
+        except (FileNotFoundError, PermissionDenied, OSError, WorkspaceError) as exc:
+            raise AssistantError("Załączone zdjęcie nie jest już dostępne w kopii roboczej.") from exc
+        content.append({
+            "type": "input_image",
+            "image_url": f"data:image/webp;base64,{encoded}",
+            "detail": "high",
+        })
+    return content
+
+
 def _replay_input(conversation: PageConversation) -> list[dict]:
     messages = list(conversation.messages.order_by("created_at", "pk"))
     last_reset = max((index for index, item in enumerate(messages) if item.role == ChatMessage.Role.SYSTEM), default=-1)
     replay = messages[last_reset + 1:]
-    return [
-        {
-            "role": message.role,
-            "content": message.context.get("model_text", message.content) if message.role == ChatMessage.Role.USER else message.content,
-        }
-        for message in replay
-        if message.role != ChatMessage.Role.SYSTEM
-    ]
+    result = []
+    for message in replay:
+        if message.role == ChatMessage.Role.SYSTEM:
+            continue
+        if message.role == ChatMessage.Role.USER:
+            text = message.context.get("model_text", message.content)
+            content = _model_content(conversation.session, text, message.context.get("attachments", []))
+        else:
+            content = message.content
+        result.append({"role": message.role, "content": content})
+    return result
 
 
 def run_chat_turn(
@@ -53,10 +78,17 @@ def run_chat_turn(
     user_text: str,
     *,
     model_text: str | None = None,
+    attachments: list[dict] | None = None,
 ) -> ChatMessage:
     try:
         with workspace_operation_lock(edit_session):
-            return _run_chat_turn_locked(edit_session, conversation, user_text, model_text=model_text)
+            return _run_chat_turn_locked(
+                edit_session,
+                conversation,
+                user_text,
+                model_text=model_text,
+                attachments=attachments or [],
+            )
     except WorkspaceBusyError as exc:
         raise AssistantError(str(exc)) from exc
 
@@ -67,6 +99,7 @@ def _run_chat_turn_locked(
     user_text: str,
     *,
     model_text: str | None = None,
+    attachments: list[dict],
 ) -> ChatMessage:
     locked = EditSession.objects.select_related("site").get(pk=edit_session.pk)
     if locked.status != EditSession.Status.ACTIVE:
@@ -76,12 +109,17 @@ def _run_chat_turn_locked(
         raise AssistantError("Wybrany czat nie należy do tej kopii roboczej.")
     page = PageConversation.objects.get(pk=conversation.pk, session=locked)
     model_text = model_text or user_text
+    context = {}
+    if model_text != user_text:
+        context["model_text"] = model_text
+    if attachments:
+        context["attachments"] = attachments
     user_message = ChatMessage.objects.create(
         session=locked,
         conversation=page,
         role=ChatMessage.Role.USER,
         content=user_text,
-        context={"model_text": model_text} if model_text != user_text else {},
+        context=context,
     )
     try:
         from openai import OpenAI
@@ -101,7 +139,7 @@ def _run_chat_turn_locked(
     }
     if page.last_response_id:
         request["previous_response_id"] = page.last_response_id
-        request["input"] = [{"role": "user", "content": model_text}]
+        request["input"] = [{"role": "user", "content": _model_content(locked, model_text, attachments)}]
     else:
         request["input"] = _replay_input(page)
 

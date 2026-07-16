@@ -7,7 +7,7 @@ from django.contrib.auth.decorators import login_required
 from django.db import close_old_connections
 from django.core.exceptions import ImproperlyConfigured
 from django.core.exceptions import PermissionDenied
-from django.http import Http404, HttpResponse, JsonResponse
+from django.http import FileResponse, Http404, HttpResponse, JsonResponse
 from django.shortcuts import get_object_or_404, redirect, render
 from django.urls import reverse
 from django.views.decorators.cache import never_cache
@@ -15,12 +15,13 @@ from django.views.decorators.http import require_POST
 
 from .config import load_site_config
 from .forms import ChatForm, InlineEditForm, PageAddressForm, StartSessionForm
-from .models import EditSession, PageConversation, SiteMembership
+from .models import ChatMessage, EditSession, PageConversation, SiteMembership
 from .navigation import get_or_create_page_conversation, repair_page_conversation
 from .permissions import session_for_user
 from .preview_access import add_preview_token, make_preview_token, verify_preview_token
 from .runtime_assets import asset_path, asset_version
 from .services.assistant import AssistantError, run_chat_turn
+from .services.images import ImageUploadError, process_image_upload
 from .services.workspaces import (
     WorkspaceError,
     changed_paths,
@@ -30,6 +31,7 @@ from .services.workspaces import (
     publish_workspace,
     refresh_preview_assets,
     reset_workspace,
+    safe_path,
 )
 
 
@@ -202,15 +204,72 @@ def session_progress(request, session_id):
 def send_message(request, session_id, conversation_id):
     edit_session = session_for_user(request.user, session_id)
     conversation = _page_for_session(edit_session, conversation_id)
-    form = ChatForm(request.POST)
+    form = ChatForm(request.POST, request.FILES)
     if not form.is_valid():
-        messages.error(request, "Wiadomość jest pusta albo zbyt długa.")
+        messages.error(request, " ".join(error for errors in form.errors.values() for error in errors))
     else:
+        attachment = None
         try:
-            run_chat_turn(edit_session, conversation, form.cleaned_data["message"])
-        except AssistantError as exc:
+            if form.cleaned_data.get("image"):
+                attachment = process_image_upload(edit_session, form.cleaned_data["image"])
+            user_text = form.cleaned_data["message"].strip() or "Wykorzystaj załączone zdjęcie na tej podstronie."
+            model_text = user_text
+            if attachment:
+                variants = {
+                    name: {
+                        "site_path": item["path"],
+                        "width": item["width"],
+                        "height": item["height"],
+                        "bytes": item["bytes"],
+                    }
+                    for name, item in attachment["variants"].items()
+                }
+                model_text += "\n\n" + (
+                    "Użytkownik załączył zdjęcie, które zostało bezpiecznie przetworzone do WebP. "
+                    "Obejrzyj załączony obraz i dobierz wariant do celu. Dla CSS background użyj wariantu "
+                    "background z background-size: cover; dla grafiki przycisku wariantu button; dla zwykłego "
+                    "obrazu w treści wariantu content; wariant large zachowaj dla dużej ekspozycji. Wszystkie "
+                    "warianty przedstawiają to samo zdjęcie i wolno użyć kilku z nich na jednej stronie. "
+                    "Nie dodawaj początkowego ukośnika do URL obrazu, bo usunąłby techniczny prefiks podglądu. "
+                    "W HTML i stylu wpisanym w dokument użyj podanej site_path. Jeśli edytujesz zewnętrzny plik "
+                    "CSS, oblicz ścieżkę względną od katalogu tego CSS do site_path. Dostępne pliki:\n"
+                    + json.dumps(variants, ensure_ascii=False, indent=2)
+                )
+            run_chat_turn(
+                edit_session,
+                conversation,
+                user_text,
+                model_text=model_text,
+                attachments=[attachment] if attachment else [],
+            )
+        except (AssistantError, ImageUploadError) as exc:
             messages.error(request, str(exc))
     return redirect(conversation)
+
+
+@login_required
+def message_attachment(request, session_id, message_id, variant):
+    edit_session = session_for_user(request.user, session_id)
+    message = get_object_or_404(ChatMessage, pk=message_id, session=edit_session)
+    attachments = message.context.get("attachments", [])
+    if len(attachments) != 1:
+        raise Http404
+    item = attachments[0].get("variants", {}).get(variant)
+    if not item:
+        raise Http404
+    config = load_site_config(edit_session.site.config_key)
+    relative = item.get("path", "")
+    if not config.is_uploaded_asset(relative):
+        raise Http404
+    try:
+        path = safe_path(edit_session, relative)
+    except (FileNotFoundError, PermissionDenied, WorkspaceError):
+        raise Http404
+    response = FileResponse(path.open("rb"), content_type="image/webp", filename=path.name)
+    response["Content-Disposition"] = f'inline; filename="{path.name}"'
+    response["Cache-Control"] = "private, max-age=3600"
+    response["X-Content-Type-Options"] = "nosniff"
+    return response
 
 
 @login_required
