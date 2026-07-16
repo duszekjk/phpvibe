@@ -7,3 +7,9 @@ staticfiles/
 var/
 site_configs/*.toml
 !site_configs/*.example
+
+# Konfiguracja konkretnego serwera jest przechowywana poza repozytorium.
+*.plist
+*.conf
+sites-enabled/
+sites-available/

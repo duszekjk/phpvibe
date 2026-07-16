@@ -1,0 +1,74 @@
+name: Testy
+
+on:
+  push:
+  pull_request:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: tests-${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  repository-policy:
+    name: Polityka repozytorium
+    runs-on: ubuntu-latest
+    steps:
+      - name: Pobierz repozytorium
+        uses: actions/checkout@v4
+
+      - name: Sprawdź pliki zależne od serwera i artefakty
+        run: python -m unittest editor.tests.test_repository_policy -v
+
+  application:
+    name: Django i zasoby (Python ${{ matrix.python-version }})
+    runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        python-version: ["3.12", "3.14"]
+    env:
+      DJANGO_SECRET_KEY: ci-only-4E7zGm9Vq2Nw8Dx5Hs1Yp6Jk3Tf0Rc7Ba4Lu9Ce2Wi8
+      DJANGO_DEBUG: "0"
+      DJANGO_ALLOWED_HOSTS: testserver,localhost,127.0.0.1
+      DJANGO_SECURE_SSL_REDIRECT: "1"
+      DJANGO_SECURE_COOKIES: "1"
+      DJANGO_SECURE_HSTS_SECONDS: "31536000"
+      DJANGO_SECURE_HSTS_INCLUDE_SUBDOMAINS: "1"
+      DJANGO_SECURE_HSTS_PRELOAD: "1"
+      VIBE_PANEL_ORIGIN: https://phpvibe.example.test
+    steps:
+      - name: Pobierz repozytorium
+        uses: actions/checkout@v4
+
+      - name: Ustaw Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: ${{ matrix.python-version }}
+          cache: pip
+
+      - name: Zainstaluj zależności
+        run: python -m pip install --disable-pip-version-check -r requirements.txt
+
+      - name: Sprawdź spójność zależności
+        run: python -m pip check
+
+      - name: Sprawdź składnię Pythona i JavaScriptu
+        run: |
+          python -m compileall -q deploy editor phpvibe manage.py
+          node --check editor/static/editor/preview-bridge.js
+          node --check editor/static/editor/workbench.js
+
+      - name: Sprawdź konfigurację produkcyjną Django
+        run: python manage.py check --deploy
+
+      - name: Sprawdź brakujące migracje
+        run: python manage.py makemigrations --check --dry-run
+
+      - name: Sprawdź kompletność zasobów statycznych
+        run: python manage.py collectstatic --noinput
+
+      - name: Uruchom wszystkie testy
+        run: python manage.py test --verbosity 2

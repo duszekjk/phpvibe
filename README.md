@@ -77,7 +77,7 @@ Nie należy uruchamiać kodu PHP zmienianego przez model w głównym poolu PHP-F
 
 W kopii Jerozolimy są skrypty używające `file_put_contents`, dlatego rozdzielenie użytkownika Django od użytkownika PHP i odebranie temu drugiemu prawa zapisu jest wymaganiem, nie opcjonalnym utwardzeniem. Dla katalogu podglądu ustaw także `AllowOverride None`, aby produkcyjny `.htaccess` skopiowany razem ze stroną nie zmieniał reguł reverse proxy ani bezpieczeństwa podglądu.
 
-`preview_url_template` wskazuje trasę Apache mapującą UUID wyłącznie na `VIBE_WORKSPACE_ROOT/<uuid>/site`. Konfiguracja z `deploy/phpvibe-apache.conf` sprawdza format UUID i przekazuje parę UUID/token do trwałego helpera `RewriteMap`. Helper pyta lokalny endpoint Django, a Apache udostępnia plik dopiero po odpowiedzi `204`. Nie wolno budować ścieżki z dowolnego fragmentu URL.
+`preview_url_template` wskazuje trasę Apache mapującą UUID wyłącznie na `VIBE_WORKSPACE_ROOT/<uuid>/site`. Zewnętrzna konfiguracja Apache sprawdza format UUID i przekazuje parę UUID/token do trwałego helpera `RewriteMap`. Helper pyta lokalny endpoint Django, a Apache udostępnia plik dopiero po odpowiedzi `204`. Nie wolno budować ścieżki z dowolnego fragmentu URL.
 
 Podgląd działa na osobnym originie `https://tmp.jerozolima.org`, bez ciasteczka sesji Django. Panel dodaje do adresu krótko ważny, podpisany parametr `__vibe_token`, ograniczony do użytkownika i konkretnej kopii. Helper Apache przekazuje go do:
 
@@ -99,7 +99,7 @@ Bridge przechwytuje wybór tekstu i wewnętrzną nawigację, a następnie komuni
 
 ### Wdrożenie Apache i Certbot
 
-Jeden plik [phpvibe-apache.conf](deploy/phpvibe-apache.conf) zawiera vhosty panelu i podglądu dla portów `80`, `8080` i `443`. Ścieżki `/.well-known/acme-challenge/` i `/static/` są obsługiwane przed proxy. HTTPS włącza się automatycznie, gdy istnieje certyfikat SAN Certbota.
+Konfiguracja vhostów panelu i podglądu dla portów `80`, `8080` i `443` jest zależna od konkretnego serwera i celowo nie jest przechowywana w tym repozytorium. To samo dotyczy pliku LaunchAgent `plist`. Pliki te należy utrzymywać poza katalogiem projektu. Ścieżki `/.well-known/acme-challenge/` i `/static/` muszą być obsługiwane przed proxy.
 
 Główna konfiguracja Apache musi już zawierać `Listen 8080` oraz `Listen 443` i mieć załadowane moduły `rewrite`, `proxy`, `proxy_http`, `headers`, `ssl`, `alias`, `dir`, `actions` oraz odpowiednio `cgi` (MPM prefork) albo `cgid` (MPM event/worker). Podgląd nie dziedziczy nieznanego handlera PHP z innego vhosta. Dedykowany launcher `php_preview_cgi.py` uruchamia `php-cgi`, sprawdza zgodność URL-u ze ścieżką kopii i ustawia osobny `open_basedir` dla UUID. Brak `php-cgi` kończy się odpowiedzią `503`, nigdy wysłaniem źródła PHP.
 
@@ -111,7 +111,6 @@ chmod 755 /private/var/www/phpvibe/deploy/preview_auth_map.py \
 command -v php-cgi
 sudo mkdir -p /private/var/www/certbot/.well-known/acme-challenge
 sudo chown -R _www:_www /private/var/www/certbot
-sudo cp /private/var/www/phpvibe/deploy/phpvibe-apache.conf /etc/apache2/other/phpvibe.conf
 sudo apachectl -t
 sudo apachectl graceful
 sudo certbot certonly --webroot -w /private/var/www/certbot \
