@@ -30,3 +30,13 @@ class RuntimeAssetTests(SimpleTestCase):
         response = self.client.get("/_assets/editor/settings.py", secure=True)
 
         self.assertEqual(response.status_code, 404)
+
+    def test_mobile_workbench_stacks_a_desktop_scaled_preview_above_chat(self):
+        css = asset_path("workbench.css").read_text(encoding="utf-8")
+        javascript = asset_path("workbench.js").read_text(encoding="utf-8")
+
+        self.assertIn("grid-template-rows: auto minmax(0, 1fr)", css)
+        self.assertIn("aspect-ratio: 16 / 9", css)
+        self.assertIn("width: 1280px", css)
+        self.assertIn("height: 720px", css)
+        self.assertIn("--mobile-preview-scale", javascript)

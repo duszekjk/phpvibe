@@ -15,6 +15,23 @@
   let bridgeReady = false;
   let navigating = false;
   const navigationGuardKey = `phpvibe-preview-navigation:${window.location.pathname}`;
+  const desktopPreviewWidth = 1280;
+
+  function updateMobilePreviewScale() {
+    const previewViewport = frame?.parentElement;
+    const mobile = window.matchMedia?.("(max-width: 760px)")?.matches;
+    if (!mobile || !previewViewport?.clientWidth) {
+      root.style?.removeProperty("--mobile-preview-scale");
+      return;
+    }
+    root.style?.setProperty("--mobile-preview-scale", String(previewViewport.clientWidth / desktopPreviewWidth));
+  }
+
+  updateMobilePreviewScale();
+  window.addEventListener("resize", updateMobilePreviewScale);
+  if (typeof ResizeObserver !== "undefined" && frame?.parentElement) {
+    new ResizeObserver(updateMobilePreviewScale).observe(frame.parentElement);
+  }
 
   const copyProgress = document.getElementById("copy-progress");
   if (copyProgress && root.dataset.progressUrl) {
@@ -185,6 +202,7 @@
   });
 
   frame?.addEventListener("load", () => {
+    updateMobilePreviewScale();
     if (bridgeReady) {
       loading?.classList.add("hidden");
     } else {

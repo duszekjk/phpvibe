@@ -62,6 +62,7 @@ jobs:
           node --check editor/static/editor/start-session.js
           node --check editor/static/editor/workbench.js
           node editor/tests/url_suggestions_test.js
+          node editor/tests/mobile_preview_test.js
           node editor/tests/workbench_navigation_test.js
           node editor/tests/copy_progress_test.js
 
