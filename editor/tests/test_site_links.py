@@ -1,6 +1,10 @@
+from types import SimpleNamespace
+from unittest.mock import MagicMock, patch
+
+import certifi
 from django.test import SimpleTestCase
 
-from editor.services.site_links import extract_link_suggestions
+from editor.services.site_links import _download_homepage, extract_link_suggestions
 
 
 class SiteLinkExtractionTests(SimpleTestCase):
@@ -52,3 +56,35 @@ class SiteLinkExtractionTests(SimpleTestCase):
             ),
             1,
         )
+
+    @patch("editor.services.site_links.build_opener")
+    @patch("editor.services.site_links.HTTPSHandler")
+    @patch("editor.services.site_links.ssl.create_default_context")
+    def test_homepage_download_uses_certifi_without_disabling_tls_verification(
+        self,
+        create_default_context,
+        https_handler,
+        build_opener,
+    ):
+        tls_context = object()
+        create_default_context.return_value = tls_context
+        https_handler.return_value = object()
+        response = MagicMock()
+        response.__enter__.return_value = response
+        response.geturl.return_value = "https://example.org/"
+        response.read.return_value = b"<a href='/kontakt'>Kontakt</a>"
+        response.headers.get_content_charset.return_value = "utf-8"
+        build_opener.return_value.open.return_value = response
+        config = SimpleNamespace(
+            homepage_url="https://example.org/",
+            allowed_hosts=frozenset({"example.org"}),
+        )
+
+        html = _download_homepage(config)
+
+        self.assertEqual(html, "<a href='/kontakt'>Kontakt</a>")
+        create_default_context.assert_called_once_with(cafile=certifi.where())
+        https_handler.assert_called_once_with(context=tls_context)
+        request = build_opener.return_value.open.call_args.args[0]
+        self.assertEqual(request.full_url, "https://example.org/")
+        self.assertEqual(build_opener.return_value.open.call_args.kwargs, {"timeout": 8})

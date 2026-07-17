@@ -4,9 +4,12 @@ from dataclasses import asdict, dataclass
 from hashlib import sha256
 from html.parser import HTMLParser
 import re
+import ssl
 from urllib.error import HTTPError, URLError
 from urllib.parse import urljoin, urlsplit
-from urllib.request import HTTPRedirectHandler, Request, build_opener
+from urllib.request import HTTPRedirectHandler, HTTPSHandler, Request, build_opener
+
+import certifi
 
 from django.core.cache import cache
 from django.core.exceptions import ValidationError
@@ -182,7 +185,11 @@ def _download_homepage(config: SiteConfig) -> str:
         config.homepage_url,
         headers={"User-Agent": "PHPVibe link suggestions/1.0", "Accept": "text/html,application/xhtml+xml"},
     )
-    opener = build_opener(_SameSiteRedirectHandler(config.allowed_hosts))
+    tls_context = ssl.create_default_context(cafile=certifi.where())
+    opener = build_opener(
+        _SameSiteRedirectHandler(config.allowed_hosts),
+        HTTPSHandler(context=tls_context),
+    )
     try:
         with opener.open(request, timeout=8) as response:
             final_host = (urlsplit(response.geturl()).hostname or "").lower()
