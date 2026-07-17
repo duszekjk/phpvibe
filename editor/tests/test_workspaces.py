@@ -62,9 +62,9 @@ class WorkspaceTests(TestCase):
         self.settings_override.disable()
         self.temp.cleanup()
 
-    def _write_config(self, *, publish=True):
+    def _write_config(self):
         (self.config_dir / "test.toml").write_text(
-            f'''name = "Test"\nroot_path = "{self.source}"\nallowed_hosts = ["example.org"]\npreview_url_template = "https://preview.example/{{session_id}}/"\nallowed_extensions = [".php", ".css", ".txt"]\npublish_enabled = {str(publish).lower()}\nbackup_path = "{self.backup_dir}"\ndescription = "Testowa strona PHP"\n[[preview_replacements]]\npath = "index.php"\nproduction_text = "<?php "\npreview_text = "<?php /* __PHPVIBE_PREVIEW_TEST__ */ "\nrequired = true\n''',
+            f'''name = "Test"\nroot_path = "{self.source}"\nallowed_hosts = ["example.org"]\npreview_url_template = "https://preview.example/{{session_id}}/"\nallowed_extensions = [".php", ".css", ".txt"]\nbackup_path = "{self.backup_dir}"\ndescription = "Testowa strona PHP"\n[[preview_replacements]]\npath = "index.php"\nproduction_text = "<?php "\npreview_text = "<?php /* __PHPVIBE_PREVIEW_TEST__ */ "\nrequired = true\n''',
             encoding="utf-8",
         )
 
@@ -177,8 +177,12 @@ class WorkspaceTests(TestCase):
         self.assertIn("oczekująca zmiana", self.source.joinpath("index.php").read_text(encoding="utf-8"))
         self.assertTrue(item.revisions.filter(summary="Zatwierdzenie zmian roboczych").exists())
 
-    def test_disabled_publish_configuration_is_explained_in_workbench(self):
-        self._write_config(publish=False)
+    def test_legacy_false_publish_setting_cannot_disable_publication(self):
+        config_path = self.config_dir / "test.toml"
+        config_path.write_text(
+            config_path.read_text(encoding="utf-8") + "\npublish_enabled = false\n",
+            encoding="utf-8",
+        )
         load_site_config.cache_clear()
         item = self.new_session()
         replace_text(item, "index.php", "stara treść", "nowa treść", False, "Zmiana")
@@ -187,8 +191,22 @@ class WorkspaceTests(TestCase):
         response = self.client.get(item.get_absolute_url(), secure=True)
 
         self.assertContains(response, "Zatwierdź i opublikuj")
-        self.assertContains(response, "Publikowanie jest wyłączone w konfiguracji tej strony.")
-        self.assertContains(response, "disabled")
+        self.assertNotContains(response, "Publikowanie jest wyłączone")
+        self.assertEqual(publish_workspace(item), ["index.php"])
+
+    def test_config_requires_backup_path_for_publication(self):
+        config_path = self.config_dir / "test.toml"
+        config_path.write_text(
+            "\n".join(
+                line for line in config_path.read_text(encoding="utf-8").splitlines()
+                if not line.startswith("backup_path =")
+            ),
+            encoding="utf-8",
+        )
+        load_site_config.cache_clear()
+
+        with self.assertRaisesRegex(ImproperlyConfigured, "backup_path"):
+            load_site_config("test")
 
     def test_reset_restores_baseline_and_removes_new_files(self):
         item = self.new_session()

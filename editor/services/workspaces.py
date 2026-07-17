@@ -518,8 +518,6 @@ def publish_workspace(edit_session: EditSession) -> list[str]:
 
 def _publish_workspace_locked(locked: EditSession) -> list[str]:
     config = load_site_config(locked.site.config_key)
-    if not config.publish_enabled or not config.backup_path:
-        raise WorkspaceError("Publikowanie nie jest włączone w konfiguracji tej strony.")
     if locked.status != EditSession.Status.ACTIVE:
         raise WorkspaceError("Publikować można wyłącznie aktywną rozmowę.")
 

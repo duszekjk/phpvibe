@@ -77,7 +77,8 @@ class RepositoryPolicyTests(unittest.TestCase):
         with example.open("rb") as handle:
             config = tomllib.load(handle)
 
-        self.assertFalse(config["publish_enabled"])
+        self.assertNotIn("publish_enabled", config)
+        self.assertTrue(config["backup_path"])
         self.assertEqual(config["preview_url_template"].count("{session_id}"), 1)
         self.assertTrue(config["allowed_hosts"])
         self.assertIn(".env", config["protected_paths"])

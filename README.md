@@ -128,7 +128,7 @@ Warianty są częścią historii Git kopii roboczej, znikają po przywróceniu p
 
 ## Publikacja i odzyskiwanie
 
-Publikacja jest domyślnie wyłączona. Aby ją włączyć, ustaw `publish_enabled = true` i `backup_path` na katalog poza drzewem publicznym. Aplikacja:
+Każda skonfigurowana strona obsługuje publikację. Uprawnienie do niej wynika z roli użytkownika, a nie z przełącznika w TOML. Konfiguracja wymaga `backup_path` wskazującego katalog poza drzewem publicznym. Aplikacja:
 
 1. pobiera wyłącznie pliki zmienione względem bazowego commita;
 2. sprawdza ich hash w produkcji względem początku rozmowy;
@@ -144,7 +144,7 @@ Dla serwisu o wysokim ruchu kolejnym krokiem powinny być niemutowalne katalogi 
 - kopiowanie dużej strony i wywołanie OpenAI są obecnie synchroniczne; produkcyjnie należy przenieść je do kolejki zadań (np. Celery/RQ) i dodać aktualizację statusu;
 - nie ma jeszcze przesyłania obrazów ani usuwania plików przez model;
 - SQLite służy do lokalnego startu; produkcyjnie użyj PostgreSQL;
-- przed włączeniem publikacji trzeba skonfigurować i przetestować izolowany podgląd PHP;
+- przed pierwszą publikacją trzeba skonfigurować i przetestować izolowany podgląd PHP;
 - kopie robocze wymagają polityki retencji i cyklicznego sprzątania zarchiwizowanych projektów.
 
 ## Testy

@@ -15,8 +15,8 @@ asset_upload_path = "pliki/images/phpvibe"
 ignored_names = [".git", ".DS_Store", "vendor", "node_modules"]
 protected_paths = [".env", ".env.*", "*secret*", "*credentials*", "config/private.php"]
 
-# Publikację włącz dopiero po ustawieniu prawdziwego backup_path i przetestowaniu podglądu.
-publish_enabled = false
+# Każda skonfigurowana strona obsługuje publikację. Ten katalog przechowuje kopie
+# plików produkcyjnych zastępowanych podczas publikacji i musi leżeć poza root_path.
 backup_path = "/var/backups/phpvibe"
 
 description = """

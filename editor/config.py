@@ -28,8 +28,7 @@ class SiteConfig:
     ignored_names: frozenset[str]
     protected_paths: tuple[str, ...]
     preview_replacements: tuple[PreviewReplacement, ...]
-    publish_enabled: bool
-    backup_path: Path | None
+    backup_path: Path
     asset_upload_path: str
 
     def preview_url(self, session_id, target_url: str | None = None) -> str:
@@ -105,12 +104,11 @@ def load_site_config(key: str) -> SiteConfig:
     if any(not item or item in {".", ".."} or "/" in item for item in ignored_names):
         raise ImproperlyConfigured("ignored_names może zawierać tylko pojedyncze nazwy plików lub katalogów.")
 
-    backup = raw.get("backup_path")
-    backup_path = Path(backup).expanduser().resolve() if backup else None
-    publish_enabled = bool(raw.get("publish_enabled", False))
-    if publish_enabled and backup_path is None:
-        raise ImproperlyConfigured("Włączona publikacja wymaga backup_path.")
-    if backup_path is not None and (backup_path == root or root in backup_path.parents):
+    backup = str(raw.get("backup_path", "")).strip()
+    if not backup:
+        raise ImproperlyConfigured("Konfiguracja musi zawierać backup_path wymagany do bezpiecznej publikacji.")
+    backup_path = Path(backup).expanduser().resolve()
+    if backup_path == root or root in backup_path.parents:
         raise ImproperlyConfigured("backup_path musi znajdować się poza katalogiem strony produkcyjnej.")
     configured_protected = tuple(raw.get("protected_paths", [".env", ".env.*", "*secret*", "*credentials*"]))
     asset_upload_path = str(raw.get("asset_upload_path", "pliki/images/phpvibe")).strip().strip("/")
@@ -148,7 +146,6 @@ def load_site_config(key: str) -> SiteConfig:
         ignored_names=ignored_names,
         protected_paths=configured_protected + ("__phpvibe_preview", "__phpvibe_preview/*", "__phpvibe_preview/**"),
         preview_replacements=preview_replacements,
-        publish_enabled=publish_enabled,
         backup_path=backup_path,
         asset_upload_path=asset_upload_path,
     )

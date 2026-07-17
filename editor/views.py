@@ -140,12 +140,10 @@ def session_detail(request, session_id, conversation_id=None):
             if preview_available
             else ""
         )
-        publish_configured = config.publish_enabled
         allowed_hosts = ",".join(sorted(config.allowed_hosts))
     except ImproperlyConfigured as exc:
         preview_url = ""
         preview_base_url = ""
-        publish_configured = False
         allowed_hosts = ""
         messages.error(request, str(exc))
     try:
@@ -160,8 +158,6 @@ def session_detail(request, session_id, conversation_id=None):
         diff = ""
     if not can_publish:
         publish_block_reason = "Nie masz uprawnienia do publikowania tej strony."
-    elif not publish_configured:
-        publish_block_reason = "Publikowanie jest wyłączone w konfiguracji tej strony."
     elif not changed_files:
         publish_block_reason = "Kopia robocza nie różni się od stanu początkowego."
     else:
@@ -178,7 +174,6 @@ def session_detail(request, session_id, conversation_id=None):
         "allowed_hosts": allowed_hosts,
         "can_publish": can_publish,
         "can_delete": can_delete,
-        "publish_configured": publish_configured,
         "publish_block_reason": publish_block_reason,
         "changed_files": changed_files,
         "changed_file_count": len(changed_files),
