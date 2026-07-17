@@ -1,6 +1,7 @@
 from django.template import Context, Template
 from django.test import SimpleTestCase
 from django.urls import reverse
+from PIL import Image
 
 from editor.runtime_assets import ASSET_NAMES, asset_path, asset_version
 
@@ -40,3 +41,40 @@ class RuntimeAssetTests(SimpleTestCase):
         self.assertIn("width: 1280px", css)
         self.assertIn("height: 720px", css)
         self.assertIn("--mobile-preview-scale", javascript)
+
+    def test_web_app_manifest_is_installable_and_icons_are_public(self):
+        response = self.client.get(reverse("web_app_manifest"), secure=True)
+
+        self.assertEqual(response.status_code, 200)
+        self.assertEqual(response.headers["Content-Type"], "application/manifest+json")
+        manifest = response.json()
+        self.assertEqual(manifest["display"], "standalone")
+        self.assertEqual(manifest["start_url"], "/")
+        self.assertEqual({item["sizes"] for item in manifest["icons"]}, {"192x192", "512x512"})
+        self.assertIn("maskable", {item["purpose"] for item in manifest["icons"]})
+        for icon in manifest["icons"]:
+            with self.subTest(icon=icon["src"]):
+                icon_response = self.client.get(icon["src"], secure=True)
+                self.assertEqual(icon_response.status_code, 200)
+                self.assertEqual(icon_response.headers["Content-Type"], "image/png")
+
+    def test_pwa_icons_have_required_dimensions_and_opaque_corners(self):
+        expected = {
+            "apple-touch-icon.png": (180, 180),
+            "pwa-icon-192.png": (192, 192),
+            "pwa-icon-512.png": (512, 512),
+            "pwa-icon-maskable-512.png": (512, 512),
+        }
+        for name, dimensions in expected.items():
+            with self.subTest(name=name), Image.open(asset_path(name)) as icon:
+                self.assertEqual(icon.size, dimensions)
+                self.assertEqual(icon.convert("RGBA").getpixel((0, 0))[3], 255)
+
+    def test_base_template_declares_manifest_install_ui_and_safe_viewport(self):
+        response = self.client.get(reverse("login"), secure=True)
+
+        self.assertContains(response, 'rel="manifest"')
+        self.assertContains(response, 'rel="apple-touch-icon"')
+        self.assertContains(response, "viewport-fit=cover")
+        self.assertContains(response, 'id="pwa-install-prompt"')
+        self.assertRegex(response.content.decode(), r'src="/_assets/editor/pwa-install\.js\?v=[0-9a-f]{12}"')

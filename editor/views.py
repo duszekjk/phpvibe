@@ -53,6 +53,38 @@ def runtime_asset(request, name):
     return response
 
 
+def web_app_manifest(request):
+    def versioned_asset(name):
+        return f"{reverse('runtime_asset', kwargs={'name': name})}?v={asset_version(name)}"
+
+    response = JsonResponse({
+        "id": "/",
+        "name": "PHP Vibe",
+        "short_name": "PHP Vibe",
+        "description": "Mobilny edytor stron PHP sterowany rozmową.",
+        "lang": "pl",
+        "start_url": reverse("dashboard"),
+        "scope": "/",
+        "display": "standalone",
+        "background_color": "#f9f9f8",
+        "theme_color": "#f76b15",
+        "categories": ["productivity"],
+        "icons": [
+            {"src": versioned_asset("pwa-icon-192.png"), "sizes": "192x192", "type": "image/png", "purpose": "any"},
+            {"src": versioned_asset("pwa-icon-512.png"), "sizes": "512x512", "type": "image/png", "purpose": "any"},
+            {
+                "src": versioned_asset("pwa-icon-maskable-512.png"),
+                "sizes": "512x512",
+                "type": "image/png",
+                "purpose": "maskable",
+            },
+        ],
+    })
+    response["Content-Type"] = "application/manifest+json"
+    response["Cache-Control"] = "public, max-age=3600"
+    return response
+
+
 @login_required
 @never_cache
 def dashboard(request):

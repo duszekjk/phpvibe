@@ -3,9 +3,17 @@
 <html lang="pl">
 <head>
   <meta charset="utf-8">
-  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+  <meta name="theme-color" content="#f76b15">
+  <meta name="mobile-web-app-capable" content="yes">
+  <meta name="apple-mobile-web-app-capable" content="yes">
+  <meta name="apple-mobile-web-app-status-bar-style" content="default">
+  <meta name="apple-mobile-web-app-title" content="PHP Vibe">
   <title>{% block title %}PHP Vibe{% endblock %}</title>
+  <link rel="manifest" href="{% url 'web_app_manifest' %}">
+  <link rel="apple-touch-icon" sizes="180x180" href="{% versioned_static 'editor/apple-touch-icon.png' %}">
   <link rel="stylesheet" href="{% versioned_static 'editor/app.css' %}">
+  <script src="{% versioned_static 'editor/pwa-install.js' %}" defer></script>
   {% block extra_head %}{% endblock %}
 </head>
 <body class="{% block body_class %}{% endblock %}">
@@ -19,6 +27,12 @@
       </nav>
     {% endif %}
   </header>
+  <aside class="pwa-install-prompt" id="pwa-install-prompt" aria-labelledby="pwa-install-title" hidden>
+    <div class="pwa-install-icon" aria-hidden="true">&lt;/&gt;</div>
+    <div><strong id="pwa-install-title">Zainstaluj PHP Vibe</strong><p id="pwa-install-description"></p></div>
+    <button class="button primary" id="pwa-install-button" type="button" hidden>Zainstaluj</button>
+    <button class="pwa-install-dismiss" id="pwa-install-dismiss" type="button" aria-label="Ukryj podpowiedź instalacji">×</button>
+  </aside>
   <main class="page">
     {% for message in messages %}<div class="flash {{ message.tags }}">{{ message }}</div>{% endfor %}
     {% block content %}{% endblock %}

@@ -88,7 +88,11 @@ class RepositoryPolicyTests(unittest.TestCase):
 
     def test_templates_reference_existing_static_assets(self):
         expected = {
-            "templates/base.html": ("editor/app.css",),
+            "templates/base.html": (
+                "editor/app.css",
+                "editor/apple-touch-icon.png",
+                "editor/pwa-install.js",
+            ),
             "templates/editor/start_session.html": ("editor/start-session.js",),
             "templates/editor/session_detail.html": (
                 "editor/workbench.css",

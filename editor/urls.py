@@ -4,6 +4,7 @@ from . import views
 
 
 urlpatterns = [
+    path("app.webmanifest", views.web_app_manifest, name="web_app_manifest"),
     path("_assets/editor/<str:name>", views.runtime_asset, name="runtime_asset"),
     path("", views.dashboard, name="dashboard"),
     path("rozmowy/nowa/", views.start_session, name="start_session"),

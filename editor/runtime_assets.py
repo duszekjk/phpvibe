@@ -6,7 +6,17 @@ from pathlib import Path
 from django.conf import settings
 
 
-ASSET_NAMES = frozenset({"app.css", "start-session.js", "workbench.css", "workbench.js"})
+ASSET_NAMES = frozenset({
+    "app.css",
+    "apple-touch-icon.png",
+    "pwa-icon-192.png",
+    "pwa-icon-512.png",
+    "pwa-icon-maskable-512.png",
+    "pwa-install.js",
+    "start-session.js",
+    "workbench.css",
+    "workbench.js",
+})
 
 
 def asset_path(name: str) -> Path:

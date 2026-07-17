@@ -21,8 +21,15 @@ PHP Vibe to panel Django dla nietechnicznych redaktorów starszych stron PHP. U�
 - jednoznaczne przywrócenie kopii do początku rozmowy;
 - publikacja tylko dla właściwej roli, z wykrywaniem zmian produkcji i kopią zapasową;
 - endpoint autoryzacyjny oraz helper `RewriteMap` chroniący podgląd obsługiwany przez Apache.
+- instalowalna PWA z trybem standalone, ikonami dla iOS/Androida i mobilną instrukcją instalacji.
 
 Integracja używa oficjalnego [Responses API](https://developers.openai.com/api/docs/guides/text) i [function calling](https://developers.openai.com/api/docs/guides/function-calling). Model jest ustawiany przez zmienną środowiskową, bez zaszywania go w logice aplikacji.
+
+## Instalacja na telefonie
+
+Manifest pod `/app.webmanifest` pozwala dodać PHP Vibe do ekranu głównego i uruchamiać panel w trybie `standalone`. Na iOS aplikacja pokazuje instrukcję użycia opcji „Udostępnij” → „Dodaj do ekranu początkowego”. Na obsługiwanych przeglądarkach Androida pojawia się systemowy przycisk instalacji.
+
+Pierwszy etap PWA celowo nie rejestruje service workera. Edycja, czat, OpenAI, podgląd PHP i publikowanie wymagają połączenia z serwerem, a cache przeglądarki działający w tle nie powinien przechowywać uwierzytelnionych stron, tokenów podglądu ani formularzy. Brak połączenia oznacza więc brak dostępu do edytora, zamiast wyświetlania potencjalnie nieaktualnych danych.
 
 ## Uruchomienie lokalne
 

@@ -339,7 +339,11 @@
     height: 100vh;
     height: 100dvh;
     margin: 0 auto;
-    padding: 6px 0;
+    padding:
+      max(6px, env(safe-area-inset-top))
+      env(safe-area-inset-right)
+      max(6px, env(safe-area-inset-bottom))
+      env(safe-area-inset-left);
   }
 
   .workbench-heading {
