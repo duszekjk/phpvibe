@@ -47,6 +47,8 @@ function environment({ userAgent, platform = "", maxTouchPoints = 0 }) {
   assert.equal(ios.elements["pwa-install-prompt"].hidden, false);
   assert.match(ios.elements["pwa-install-description"].textContent, /Udostępnij/);
   assert.equal(ios.elements["pwa-install-button"].hidden, true);
+  ios.windowListeners.beforeinstallprompt({ preventDefault() {} });
+  assert.equal(ios.elements["pwa-install-button"].hidden, true);
 
   const android = environment({ userAgent: "Mozilla/5.0 (Linux; Android 16) Chrome/140" });
   let prompted = 0;

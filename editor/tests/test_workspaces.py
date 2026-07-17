@@ -535,6 +535,7 @@ required = true
         self.assertRegex(response.content.decode(), r'href="/_assets/editor/workbench\.css\?v=[0-9a-f]{12}"')
         self.assertContains(response, "/__vibe_token/")
         self.assertContains(response, f'/rozmowy/{item.pk}/usun/')
+        self.assertNotContains(response, 'id="pwa-install-prompt"')
 
     def test_obsolete_token_conversation_is_repaired_on_open(self):
         item = self.new_session()
@@ -774,6 +775,7 @@ required = true
         self.assertContains(response, reverse("delete_session", kwargs={"session_id": item.pk}))
         self.assertContains(response, "Opcje rozmowy")
         self.assertContains(response, "Usuń rozmowę")
+        self.assertContains(response, 'id="pwa-install-prompt"')
 
     def test_other_site_member_does_not_see_dashboard_delete_action(self):
         item = self.new_session()

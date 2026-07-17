@@ -70,11 +70,23 @@ class RuntimeAssetTests(SimpleTestCase):
                 self.assertEqual(icon.size, dimensions)
                 self.assertEqual(icon.convert("RGBA").getpixel((0, 0))[3], 255)
 
-    def test_base_template_declares_manifest_install_ui_and_safe_viewport(self):
+    def test_base_template_declares_manifest_and_safe_viewport(self):
         response = self.client.get(reverse("login"), secure=True)
 
         self.assertContains(response, 'rel="manifest"')
         self.assertContains(response, 'rel="apple-touch-icon"')
         self.assertContains(response, "viewport-fit=cover")
-        self.assertContains(response, 'id="pwa-install-prompt"')
+        self.assertNotContains(response, 'id="pwa-install-prompt"')
         self.assertRegex(response.content.decode(), r'src="/_assets/editor/pwa-install\.js\?v=[0-9a-f]{12}"')
+
+    def test_install_prompt_exists_only_in_dashboard_template_and_hidden_button_stays_hidden(self):
+        from django.conf import settings
+
+        dashboard = (settings.BASE_DIR / "templates" / "editor" / "dashboard.html").read_text(encoding="utf-8")
+        session = (settings.BASE_DIR / "templates" / "editor" / "session_detail.html").read_text(encoding="utf-8")
+        css = asset_path("app.css").read_text(encoding="utf-8")
+
+        self.assertIn('id="pwa-install-prompt"', dashboard)
+        self.assertNotIn('id="pwa-install-prompt"', session)
+        self.assertIn(".pwa-install-prompt .button[hidden]", css)
+        self.assertIn("display: none", css)

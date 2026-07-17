@@ -1,5 +1,11 @@
 {% extends "base.html" %}
 {% block content %}
+<aside class="pwa-install-prompt" id="pwa-install-prompt" aria-labelledby="pwa-install-title" hidden>
+  <div class="pwa-install-icon" aria-hidden="true">&lt;/&gt;</div>
+  <div><strong id="pwa-install-title">Zainstaluj PHP Vibe</strong><p id="pwa-install-description"></p></div>
+  <button class="button primary" id="pwa-install-button" type="button" hidden>Zainstaluj</button>
+  <button class="pwa-install-dismiss" id="pwa-install-dismiss" type="button" aria-label="Ukryj podpowiedź instalacji">×</button>
+</aside>
 <div class="title-row">
   <div><p class="eyebrow">Twoje strony</p><h1>Rozmowy edycyjne</h1></div>
   <a class="button primary" href="{% url 'start_session' %}">+ Nowa rozmowa</a>

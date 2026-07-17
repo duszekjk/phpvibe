@@ -27,12 +27,6 @@
       </nav>
     {% endif %}
   </header>
-  <aside class="pwa-install-prompt" id="pwa-install-prompt" aria-labelledby="pwa-install-title" hidden>
-    <div class="pwa-install-icon" aria-hidden="true">&lt;/&gt;</div>
-    <div><strong id="pwa-install-title">Zainstaluj PHP Vibe</strong><p id="pwa-install-description"></p></div>
-    <button class="button primary" id="pwa-install-button" type="button" hidden>Zainstaluj</button>
-    <button class="pwa-install-dismiss" id="pwa-install-dismiss" type="button" aria-label="Ukryj podpowiedź instalacji">×</button>
-  </aside>
   <main class="page">
     {% for message in messages %}<div class="flash {{ message.tags }}">{{ message }}</div>{% endfor %}
     {% block content %}{% endblock %}

@@ -155,6 +155,10 @@ button {
   font-size: 12px;
 }
 
+.pwa-install-prompt .button[hidden] {
+  display: none;
+}
+
 .pwa-install-dismiss {
   width: 30px;
   height: 30px;

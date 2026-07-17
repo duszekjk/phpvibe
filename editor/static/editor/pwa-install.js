@@ -38,6 +38,7 @@
 
   window.addEventListener("beforeinstallprompt", event => {
     event.preventDefault();
+    if (appleMobile) return;
     deferredInstall = event;
     showPrompt("browser");
   });
