@@ -22,6 +22,7 @@ class SiteConfig:
     key: str
     root_path: Path
     allowed_hosts: frozenset[str]
+    homepage_url: str
     preview_url_template: str
     description: str
     allowed_extensions: frozenset[str]
@@ -72,6 +73,22 @@ def load_site_config(key: str) -> SiteConfig:
         raise ImproperlyConfigured("Konfiguracja musi zawierać allowed_hosts.")
     if any("://" in host or "/" in host or ":" in host for host in hosts):
         raise ImproperlyConfigured("allowed_hosts może zawierać tylko nazwy hostów, bez schematu, portu i ścieżki.")
+
+    default_host = sorted(hosts, key=lambda host: (host.startswith("www."), len(host), host))[0]
+    homepage_url = str(raw.get("homepage_url", f"https://{default_host}/")).strip()
+    try:
+        homepage_parts = urlsplit(homepage_url)
+        homepage_parts.port
+    except ValueError as exc:
+        raise ImproperlyConfigured("homepage_url jest nieprawidłowy.") from exc
+    if (
+        homepage_parts.scheme not in {"http", "https"}
+        or (homepage_parts.hostname or "").lower() not in hosts
+        or homepage_parts.username
+        or homepage_parts.password
+        or homepage_parts.fragment
+    ):
+        raise ImproperlyConfigured("homepage_url musi być adresem skonfigurowanej strony, bez danych logowania i fragmentu.")
 
     preview_template = str(raw.get("preview_url_template", "")).strip()
     if preview_template.count("{session_id}") != 1:
@@ -140,6 +157,7 @@ def load_site_config(key: str) -> SiteConfig:
         key=key,
         root_path=root,
         allowed_hosts=hosts,
+        homepage_url=homepage_url,
         preview_url_template=preview_template,
         description=raw.get("description", ""),
         allowed_extensions=frozenset(extensions),

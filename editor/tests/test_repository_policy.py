@@ -81,6 +81,7 @@ class RepositoryPolicyTests(unittest.TestCase):
         self.assertTrue(config["backup_path"])
         self.assertEqual(config["preview_url_template"].count("{session_id}"), 1)
         self.assertTrue(config["allowed_hosts"])
+        self.assertEqual(config["homepage_url"], "https://jerozolima.org/")
         self.assertIn(".env", config["protected_paths"])
         self.assertTrue(config["preview_replacements"])
         self.assertEqual(config["asset_upload_path"], "pliki/images/phpvibe")
@@ -88,6 +89,7 @@ class RepositoryPolicyTests(unittest.TestCase):
     def test_templates_reference_existing_static_assets(self):
         expected = {
             "templates/base.html": ("editor/app.css",),
+            "templates/editor/start_session.html": ("editor/start-session.js",),
             "templates/editor/session_detail.html": (
                 "editor/workbench.css",
                 "editor/workbench.js",

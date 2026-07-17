@@ -1,5 +1,7 @@
 {% extends "base.html" %}
+{% load versioned_static %}
 {% block title %}Nowa rozmowa · PHP Vibe{% endblock %}
+{% block extra_head %}<script src="{% versioned_static 'editor/start-session.js' %}" defer></script>{% endblock %}
 {% block content %}
 <a class="back" href="{% url 'dashboard' %}">← Wszystkie rozmowy</a>
 <section class="form-card card">
@@ -10,7 +12,20 @@
     {{ form.non_field_errors }}
     <label>Strona {{ form.site }}{{ form.site.errors }}</label>
     <label>Temat rozmowy {{ form.title }}{{ form.title.errors }}</label>
-    <label>Dokładny adres URL {{ form.target_url }}{{ form.target_url.errors }}<small>Adres pomaga znaleźć właściwe pliki, ale nie ogranicza dalszej rozmowy.</small></label>
+    <label>Dokładny adres URL {{ form.target_url }}{{ form.target_url.errors }}<small>Wklej pełny adres albo zacznij pisać nazwę podstrony, aby przefiltrować podpowiedzi.</small></label>
+    <section
+      class="url-suggestions"
+      id="url-suggestions"
+      data-url-template="{% url 'site_url_suggestions' 0 %}"
+      aria-labelledby="url-suggestions-title"
+    >
+      <div class="url-suggestions-head">
+        <strong id="url-suggestions-title">Podpowiedzi ze strony głównej</strong>
+        <span id="url-suggestions-count"></span>
+      </div>
+      <p class="url-suggestions-status" id="url-suggestions-status">Wybierz stronę, aby zobaczyć jej podstrony.</p>
+      <div class="url-suggestions-list" id="url-suggestions-list" role="listbox" aria-label="Podstrony"></div>
+    </section>
     <button class="button primary" type="submit">Utwórz bezpieczną kopię</button>
   </form>
 </section>

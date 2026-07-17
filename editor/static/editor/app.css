@@ -472,6 +472,82 @@ h2 {
   color: var(--muted);
 }
 
+.url-suggestions {
+  margin-top: -8px;
+  overflow: hidden;
+  border: 1px solid var(--sand-6);
+  border-radius: 12px;
+  background: var(--sand-2);
+}
+
+.url-suggestions-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 16px;
+  padding: 10px 13px;
+  border-bottom: 1px solid var(--sand-5);
+  color: var(--sand-12);
+  font-size: 13px;
+}
+
+.url-suggestions-head span {
+  color: var(--sand-10);
+  font-size: 11px;
+  font-weight: 700;
+}
+
+.url-suggestions-status {
+  margin: 0;
+  padding: 15px 13px;
+  color: var(--sand-11);
+  font-size: 13px;
+}
+
+.url-suggestions-list {
+  display: grid;
+  max-height: 290px;
+  overflow: auto;
+}
+
+.url-suggestion {
+  display: grid;
+  gap: 2px;
+  width: 100%;
+  padding: 10px 13px;
+  border: 0;
+  border-bottom: 1px solid var(--sand-5);
+  background: var(--sand-1);
+  color: var(--sand-12);
+  text-align: left;
+  cursor: pointer;
+}
+
+.url-suggestion:last-child {
+  border-bottom: 0;
+}
+
+.url-suggestion:hover,
+.url-suggestion:focus-visible {
+  outline: 0;
+  background: var(--orange-3);
+  box-shadow: inset 3px 0 var(--orange-9);
+}
+
+.url-suggestion span {
+  font-weight: 760;
+}
+
+.url-suggestion small {
+  margin: 0;
+  overflow: hidden;
+  color: var(--sand-11);
+  font-size: 11px;
+  font-weight: 400;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
 .errorlist {
   color: var(--danger);
   margin: 5px 0;

@@ -20,6 +20,7 @@ from editor.preview_access import add_preview_token, make_preview_token
 from editor.services.assistant import AssistantError, _replay_input, run_chat_turn
 from editor.services.file_tools import read_file, replace_text, write_file
 from editor.services.images import ImageUploadError, process_image_upload
+from editor.services.site_links import LinkSuggestion
 from editor.services.workspaces import (
     WorkspaceBusyError,
     WorkspaceError,
@@ -331,6 +332,39 @@ class WorkspaceTests(TestCase):
         )
         self.assertFalse(form.is_valid())
         self.assertIn("target_url", form.errors)
+
+    @patch("editor.views.get_site_link_suggestions")
+    def test_url_suggestions_endpoint_returns_links_for_a_site_member(self, suggestions):
+        suggestions.return_value = [
+            LinkSuggestion("Wspólnota → Przymierze", "https://example.org/?strona=wspolnota&podstrona=przymierze")
+        ]
+        self.client.force_login(self.user)
+
+        response = self.client.get(reverse("site_url_suggestions", kwargs={"site_id": self.site.pk}), secure=True)
+
+        self.assertEqual(response.status_code, 200)
+        self.assertEqual(response.json()["suggestions"][0]["label"], "Wspólnota → Przymierze")
+
+    @patch("editor.views.get_site_link_suggestions")
+    def test_url_suggestions_endpoint_does_not_expose_sites_without_membership(self, suggestions):
+        outsider = get_user_model().objects.create_user("outsider", password="secret123")
+        self.client.force_login(outsider)
+
+        response = self.client.get(reverse("site_url_suggestions", kwargs={"site_id": self.site.pk}), secure=True)
+
+        self.assertEqual(response.status_code, 404)
+        suggestions.assert_not_called()
+
+    def test_start_session_renders_searchable_url_suggestions(self):
+        self.client.force_login(self.user)
+
+        response = self.client.get(reverse("start_session"), secure=True)
+
+        self.assertEqual(response.context["form"].initial["site"], self.site.pk)
+        self.assertContains(response, f'<option value="{self.site.pk}" selected>Test</option>', html=True)
+        self.assertContains(response, reverse("site_url_suggestions", kwargs={"site_id": 0}))
+        self.assertContains(response, "Podpowiedzi ze strony głównej")
+        self.assertRegex(response.content.decode(), r'src="/_assets/editor/start-session\.js\?v=[0-9a-f]{12}"')
 
     def test_page_url_rejects_invalid_port(self):
         with self.assertRaises(ValidationError):

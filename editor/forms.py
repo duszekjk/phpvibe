@@ -11,12 +11,21 @@ class StartSessionForm(forms.ModelForm):
         fields = ("site", "title", "target_url")
         widgets = {
             "title": forms.TextInput(attrs={"placeholder": "Np. Aktualizacja informacji o spotkaniu"}),
-            "target_url": forms.URLInput(attrs={"placeholder": "https://example.org/?strona=kontakt"}),
+            "target_url": forms.TextInput(attrs={
+                "placeholder": "Wpisz nazwę podstrony albo wklej pełny adres URL",
+                "autocomplete": "off",
+                "inputmode": "url",
+            }),
         }
 
     def __init__(self, *args, user, **kwargs):
         super().__init__(*args, **kwargs)
-        self.fields["site"].queryset = Site.objects.filter(is_active=True, memberships__user=user).distinct()
+        sites = Site.objects.filter(is_active=True, memberships__user=user).distinct()
+        self.fields["site"].queryset = sites
+        if not self.is_bound:
+            first_site = sites.first()
+            if first_site:
+                self.initial.setdefault("site", first_site.pk)
 
     def clean(self):
         from .navigation import normalize_page_url

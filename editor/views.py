@@ -15,13 +15,14 @@ from django.views.decorators.http import require_POST
 
 from .config import load_site_config
 from .forms import ChatForm, InlineEditForm, PageAddressForm, StartSessionForm
-from .models import ChatMessage, EditSession, PageConversation, SiteMembership
+from .models import ChatMessage, EditSession, PageConversation, Site, SiteMembership
 from .navigation import get_or_create_page_conversation, repair_page_conversation
 from .permissions import session_for_user
 from .preview_access import add_preview_token, make_preview_token, verify_preview_token
 from .runtime_assets import asset_path, asset_version
 from .services.assistant import AssistantError, run_chat_turn
 from .services.images import ImageUploadError, process_image_upload
+from .services.site_links import SiteLinkError, get_site_link_suggestions
 from .services.workspaces import (
     WorkspaceError,
     changed_paths,
@@ -79,6 +80,24 @@ def start_session(request):
     else:
         form = StartSessionForm(user=request.user)
     return render(request, "editor/start_session.html", {"form": form})
+
+
+@login_required
+@never_cache
+def site_url_suggestions(request, site_id):
+    site = get_object_or_404(
+        Site.objects.filter(is_active=True, memberships__user=request.user).distinct(),
+        pk=site_id,
+    )
+    try:
+        config = load_site_config(site.config_key)
+        suggestions = get_site_link_suggestions(config)
+    except (ImproperlyConfigured, SiteLinkError) as exc:
+        return JsonResponse({
+            "suggestions": [],
+            "error": f"Nie udało się przygotować podpowiedzi. Nadal możesz wpisać pełny adres ręcznie. {exc}",
+        })
+    return JsonResponse({"suggestions": [item.as_json() for item in suggestions]})
 
 
 def _prepare_workspace(session_id):

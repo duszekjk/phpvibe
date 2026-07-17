@@ -7,6 +7,7 @@ urlpatterns = [
     path("_assets/editor/<str:name>", views.runtime_asset, name="runtime_asset"),
     path("", views.dashboard, name="dashboard"),
     path("rozmowy/nowa/", views.start_session, name="start_session"),
+    path("strony/<int:site_id>/podpowiedzi-url/", views.site_url_suggestions, name="site_url_suggestions"),
     path("rozmowy/<uuid:session_id>/", views.session_detail, name="session_detail"),
     path("rozmowy/<uuid:session_id>/postep/", views.session_progress, name="session_progress"),
     path("rozmowy/<uuid:session_id>/strony/<uuid:conversation_id>/", views.session_detail, name="page_conversation"),

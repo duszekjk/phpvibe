@@ -5,6 +5,7 @@ is_active = true
 # W środowisku produkcyjnym ustaw rzeczywistą ścieżkę. Ta ścieżka wskazuje tylko kopię testową.
 root_path = "/Volumes/FPEX/jerozolima/strona/jerozolima"
 allowed_hosts = ["jerozolima.org", "www.jerozolima.org"]
+homepage_url = "https://jerozolima.org/"
 
 # Apache mapuje ten URL na VIBE_WORKSPACE_ROOT/{session_id}/site i chroni go
 # podpisanym __vibe_token. JS/CSS są wstrzykiwane przez preview_replacements poniżej.
